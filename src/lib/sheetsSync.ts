@@ -7,6 +7,7 @@ import {
   clearSyncQueue,
   saveSheetsConfig,
   getDB,
+  DEFAULT_SCRIPT_URL,
 } from './db';
 import { parseSafeDate } from './utils';
 
@@ -369,6 +370,8 @@ function getSheetServices(ss) {
 }
 `;
 
+export { DEFAULT_SCRIPT_URL };
+
 export async function syncToGoogleSheets(): Promise<{ success: boolean; message: string }> {
   try {
     let config = await getSheetsConfig();
@@ -377,19 +380,11 @@ export async function syncToGoogleSheets(): Promise<{ success: boolean; message:
     const services = await getAllServices();
     const queue = await getSyncQueue();
 
-    let scriptUrl = config.scriptUrl ? config.scriptUrl.trim() : '';
+    let scriptUrl = (config.scriptUrl || DEFAULT_SCRIPT_URL).trim();
 
-    // If scriptUrl is empty locally, check if server proxy has remembered one
-    if (!scriptUrl) {
-      try {
-        const checkRes = await fetch('/api/sync');
-        const checkData = await checkRes.json();
-        if (checkData?.scriptUrl) {
-          scriptUrl = checkData.scriptUrl;
-          config = { ...config, scriptUrl };
-          await saveSheetsConfig(config);
-        }
-      } catch (err) {}
+    if (!config.scriptUrl) {
+      config = { ...config, scriptUrl };
+      await saveSheetsConfig(config);
     }
 
     if (!scriptUrl) {

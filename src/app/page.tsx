@@ -373,13 +373,8 @@ export default function Home() {
     const queue = await getSyncQueue();
     setSyncQueue(queue);
 
-    if (isOnline && sheetsConfig.scriptUrl && sheetsConfig.autoSync) {
+    if (isOnline && sheetsConfig.autoSync) {
       handleTriggerSync();
-    } else if (!sheetsConfig.scriptUrl) {
-      showNotice(
-        `Pelanggan ${cust.name} tersimpan di HP. Sambungkan Google Sheets di menu Sinkronisasi agar tersimpan ke Spreadsheet.`,
-        'warning'
-      );
     } else {
       showNotice(`Pelanggan ${cust.name} tersimpan!`, 'success');
     }
@@ -394,7 +389,7 @@ export default function Home() {
     setSyncQueue(queue);
     showNotice(`Pelanggan ${cust ? cust.name : ''} berhasil dihapus!`, 'warning');
 
-    if (isOnline && sheetsConfig.scriptUrl && sheetsConfig.autoSync) {
+    if (isOnline && sheetsConfig.autoSync) {
       handleTriggerSync();
     }
   };
@@ -407,6 +402,10 @@ export default function Home() {
     const queue = await getSyncQueue();
     setSyncQueue(queue);
     showNotice(`Layanan ${service.name} tersimpan!`, 'success');
+
+    if (isOnline && sheetsConfig.autoSync) {
+      handleTriggerSync();
+    }
   };
 
   const handleDeleteService = async (id: string) => {
@@ -416,6 +415,10 @@ export default function Home() {
     const queue = await getSyncQueue();
     setSyncQueue(queue);
     showNotice('Layanan berhasil dihapus', 'warning');
+
+    if (isOnline && sheetsConfig.autoSync) {
+      handleTriggerSync();
+    }
   };
 
   // User Handlers

@@ -1,5 +1,5 @@
 // Service Worker for Mama Sela Laundry PWA
-const CACHE_NAME = 'mamasela-laundry-v2';
+const CACHE_NAME = 'mamasela-laundry-v3';
 const PRECACHE_ASSETS = [
   '/',
   '/manifest.json',
@@ -42,6 +42,9 @@ self.addEventListener('fetch', (event) => {
 
   // Skip chrome-extension or external analytics
   if (url.origin !== self.location.origin) return;
+
+  // IMPORTANT: Do NOT intercept or cache API requests (like /api/sync)
+  if (url.pathname.startsWith('/api/')) return;
 
   event.respondWith(
     fetch(event.request)

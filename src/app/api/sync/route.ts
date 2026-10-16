@@ -2,8 +2,11 @@ import { NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
 
+const DEFAULT_SCRIPT_URL =
+  'https://script.google.com/macros/s/AKfycbzX_noq0WTTrRXVfSj2rbPS3XGm4CRaPmvx53mDzEJyoVUwqkj5R5DzzbgcKc445N_7/exec';
+
 // Server-side shared script URL cache across devices
-let sharedScriptUrl = process.env.GOOGLE_SCRIPT_URL || '';
+let sharedScriptUrl = process.env.GOOGLE_SCRIPT_URL || DEFAULT_SCRIPT_URL;
 const CACHE_FILE = path.join('/tmp', 'mama_sela_sync_url.txt');
 
 function getCachedUrl(): string {
@@ -17,7 +20,7 @@ function getCachedUrl(): string {
       }
     }
   } catch {}
-  return '';
+  return DEFAULT_SCRIPT_URL;
 }
 
 function saveCachedUrl(url: string) {

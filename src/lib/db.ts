@@ -259,13 +259,19 @@ export async function clearSyncQueue(ids: string[]): Promise<void> {
   await tx.done;
 }
 
+export const DEFAULT_SCRIPT_URL =
+  'https://script.google.com/macros/s/AKfycbzX_noq0WTTrRXVfSj2rbPS3XGm4CRaPmvx53mDzEJyoVUwqkj5R5DzzbgcKc445N_7/exec';
+
 export async function getSheetsConfig(): Promise<SheetsConfig> {
   const db = await getDB();
   if (!db) {
-    return { scriptUrl: '', autoSync: true };
+    return { scriptUrl: DEFAULT_SCRIPT_URL, autoSync: true };
   }
   const config = await db.get('settings', 'sheetsConfig');
-  return config || { scriptUrl: '', autoSync: true };
+  if (!config || !config.scriptUrl || !config.scriptUrl.trim()) {
+    return { scriptUrl: DEFAULT_SCRIPT_URL, autoSync: true };
+  }
+  return config;
 }
 
 export async function saveSheetsConfig(config: SheetsConfig): Promise<void> {
