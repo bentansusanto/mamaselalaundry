@@ -90,34 +90,38 @@ export async function initDatabaseDefaults() {
   const db = await getDB();
   if (!db) return;
 
+  // One-time cleanup: wipe dummy orders and customers from existing browsers
+  const isDummyCleaned = await db.get('settings', 'dummy_cleared_v1');
+  if (!isDummyCleaned) {
+    const tx = db.transaction(['orders', 'customers', 'settings'], 'readwrite');
+    await tx.objectStore('orders').clear();
+    await tx.objectStore('customers').clear();
+    await tx.objectStore('settings').put(true, 'dummy_cleared_v1');
+    await tx.objectStore('settings').put(true, 'database_initialized');
+    await tx.done;
+  }
+
   const isInitialized = await db.get('settings', 'database_initialized');
   if (!isInitialized) {
     const servicesCount = await db.count('services');
-    const ordersCount = await db.count('orders');
     const usersCount = await db.count('users');
 
-    // If existing database already has data, mark as initialized without re-seeding
-    if (servicesCount > 0 || ordersCount > 0 || usersCount > 0) {
+    // If existing database already has services or users, mark as initialized without re-seeding
+    if (servicesCount > 0 || usersCount > 0) {
       await db.put('settings', true, 'database_initialized');
     } else {
-      // First-time fresh install: load initial default data
+      // First-time fresh install: load initial services and single user
       const txServices = db.transaction('services', 'readwrite');
       for (const item of INITIAL_SERVICES) {
         await txServices.store.put(item);
       }
       await txServices.done;
 
-      const txCustomers = db.transaction('customers', 'readwrite');
-      for (const item of INITIAL_CUSTOMERS) {
-        await txCustomers.store.put(item);
+      const txUsers = db.transaction('users', 'readwrite');
+      for (const item of INITIAL_USERS) {
+        await txUsers.store.put(item);
       }
-      await txCustomers.done;
-
-      const txOrders = db.transaction('orders', 'readwrite');
-      for (const item of INITIAL_ORDERS) {
-        await txOrders.store.put(item);
-      }
-      await txOrders.done;
+      await txUsers.done;
 
       await db.put('settings', true, 'database_initialized');
     }
