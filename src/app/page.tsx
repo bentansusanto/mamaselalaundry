@@ -35,6 +35,50 @@ import { ReceiptModal } from '@/components/ReceiptModal';
 import { InstallPrompt } from '@/components/InstallPrompt';
 import { ArrowLeft, CheckCircle2, AlertCircle, AlertTriangle, X } from 'lucide-react';
 
+class ErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { hasError: boolean; error: Error | null }
+> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: any) {
+    console.error('Captured by LaundryApp ErrorBoundary:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="p-6 text-center space-y-4 my-auto">
+          <div className="w-14 h-14 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mx-auto">
+            <AlertCircle className="w-8 h-8" />
+          </div>
+          <h2 className="text-base font-bold text-slate-900">Terjadi Kesalahan Tampilan</h2>
+          <p className="text-xs text-slate-500 max-w-xs mx-auto">
+            Aplikasi mendeteksi pembaruan data. Silakan muat ulang halaman untuk memperbarui tampilan.
+          </p>
+          <button
+            onClick={() => {
+              this.setState({ hasError: false, error: null });
+              window.location.reload();
+            }}
+            className="px-4 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold shadow-md hover:bg-blue-700 transition"
+          >
+            Muat Ulang Halaman
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export default function Home() {
   const [currentTab, setCurrentTab] = useState<NavTab>('dashboard');
   const [moreSubView, setMoreSubView] = useState<MoreSubView>('menu');
@@ -63,6 +107,19 @@ export default function Home() {
     async function loadData() {
       await initDatabaseDefaults();
       let loadedConfig = await getSheetsConfig();
+
+      // Check if URL has ?sync_url=... (for 1-click cross-device sharing between Laptop & HP)
+      if (typeof window !== 'undefined') {
+        try {
+          const urlParams = new URLSearchParams(window.location.search);
+          const syncUrlParam = urlParams.get('sync_url');
+          if (syncUrlParam && syncUrlParam.trim()) {
+            loadedConfig = { ...loadedConfig, scriptUrl: syncUrlParam.trim() };
+            await saveSheetsConfig(loadedConfig);
+            window.history.replaceState({}, document.title, window.location.pathname);
+          }
+        } catch (e) {}
+      }
 
       // If local device doesn't have scriptUrl yet, fetch shared scriptUrl from server
       if (!loadedConfig.scriptUrl) {
@@ -94,7 +151,8 @@ export default function Home() {
 
       // Background two-way sync on launch to pull newest data from Google Sheets
       if (loadedConfig.scriptUrl && loadedConfig.autoSync) {
-        syncToGoogleSheets().then(async (res) => {
+        try {
+          const res = await syncToGoogleSheets();
           if (res.success) {
             const freshOrders = await getAllOrders();
             const freshCustomers = await getAllCustomers();
@@ -103,7 +161,9 @@ export default function Home() {
             setCustomers(freshCustomers);
             setServices(freshServices);
           }
-        });
+        } catch (syncErr) {
+          console.warn('Initial background sync error:', syncErr);
+        }
       }
     }
 
@@ -218,11 +278,17 @@ export default function Home() {
     setSyncQueue(queue);
 
     // Auto sync if online and enabled
-    if (isOnline && sheetsConfig.autoSync) {
+    if (isOnline && sheetsConfig.scriptUrl && sheetsConfig.autoSync) {
       handleTriggerSync();
+    } else if (!sheetsConfig.scriptUrl) {
+      showNotice(
+        `Order #${order.id} tersimpan di HP. Sambungkan Google Sheets di menu Sinkronisasi agar tersimpan ke Spreadsheet.`,
+        'warning'
+      );
+    } else {
+      showNotice(`Order #${order.id} berhasil dibuat!`, 'success');
     }
 
-    showNotice(`Order #${order.id} berhasil dibuat!`, 'success');
     setActiveReceiptOrder(order);
   };
 
@@ -241,7 +307,7 @@ export default function Home() {
     setSyncQueue(queue);
     showNotice(`Status pesanan diperbarui: ${nextStatus}`, 'success');
 
-    if (isOnline && sheetsConfig.autoSync) {
+    if (isOnline && sheetsConfig.scriptUrl && sheetsConfig.autoSync) {
       handleTriggerSync();
     }
   };
@@ -261,7 +327,7 @@ export default function Home() {
     setSyncQueue(queue);
     showNotice(`Pembayaran diperbarui: ${paymentStatus}`, 'success');
 
-    if (isOnline && sheetsConfig.autoSync) {
+    if (isOnline && sheetsConfig.scriptUrl && sheetsConfig.autoSync) {
       handleTriggerSync();
     }
   };
@@ -273,10 +339,16 @@ export default function Home() {
     setCustomers(updated);
     const queue = await getSyncQueue();
     setSyncQueue(queue);
-    showNotice(`Pelanggan ${cust.name} tersimpan!`, 'success');
 
-    if (isOnline && sheetsConfig.autoSync) {
+    if (isOnline && sheetsConfig.scriptUrl && sheetsConfig.autoSync) {
       handleTriggerSync();
+    } else if (!sheetsConfig.scriptUrl) {
+      showNotice(
+        `Pelanggan ${cust.name} tersimpan di HP. Sambungkan Google Sheets di menu Sinkronisasi agar tersimpan ke Spreadsheet.`,
+        'warning'
+      );
+    } else {
+      showNotice(`Pelanggan ${cust.name} tersimpan!`, 'success');
     }
   };
 
@@ -289,7 +361,7 @@ export default function Home() {
     setSyncQueue(queue);
     showNotice(`Pelanggan ${cust ? cust.name : ''} berhasil dihapus!`, 'warning');
 
-    if (isOnline && sheetsConfig.autoSync) {
+    if (isOnline && sheetsConfig.scriptUrl && sheetsConfig.autoSync) {
       handleTriggerSync();
     }
   };
@@ -384,8 +456,9 @@ export default function Home() {
 
       {/* Main Content View Container */}
       <div className="p-4 flex-1">
-        {/* Tab 1: Dashboard */}
-        {currentTab === 'dashboard' && (
+        <ErrorBoundary>
+          {/* Tab 1: Dashboard */}
+          {currentTab === 'dashboard' && (
           <DashboardView
             orders={orders}
             customers={customers}
@@ -476,6 +549,7 @@ export default function Home() {
             )}
           </div>
         )}
+        </ErrorBoundary>
       </div>
 
       {/* Bottom Navigation */}

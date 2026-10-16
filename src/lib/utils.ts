@@ -15,26 +15,65 @@ export function formatRupiah(value: number): string {
   }).format(value);
 }
 
-export function formatDate(dateString: string): string {
-  if (!dateString) return '-';
-  const date = new Date(dateString);
-  return new Intl.DateTimeFormat('id-ID', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  }).format(date);
+export function parseSafeDate(dateStr: string | undefined | null): Date | null {
+  if (!dateStr || typeof dateStr !== 'string') return null;
+  const trimmed = dateStr.trim();
+  if (!trimmed) return null;
+
+  // Try native parse first
+  const nativeDate = new Date(trimmed);
+  if (!isNaN(nativeDate.getTime())) {
+    return nativeDate;
+  }
+
+  // Handle DD/MM/YYYY or D/M/YYYY with optional time like "16/10/2026, 17.15.00"
+  const dmyMatch = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[,\s]+(\d{1,2})[.:](\d{1,2})(?:[.:](\d{1,2}))?)?/);
+  if (dmyMatch) {
+    const day = parseInt(dmyMatch[1], 10);
+    const month = parseInt(dmyMatch[2], 10) - 1;
+    const year = parseInt(dmyMatch[3], 10);
+    const hour = dmyMatch[4] ? parseInt(dmyMatch[4], 10) : 0;
+    const min = dmyMatch[5] ? parseInt(dmyMatch[5], 10) : 0;
+    const sec = dmyMatch[6] ? parseInt(dmyMatch[6], 10) : 0;
+    const parsed = new Date(year, month, day, hour, min, sec);
+    if (!isNaN(parsed.getTime())) {
+      return parsed;
+    }
+  }
+
+  return null;
 }
 
-export function formatDateTime(dateString: string): string {
+export function formatDate(dateString: string | undefined | null): string {
   if (!dateString) return '-';
-  const date = new Date(dateString);
-  return new Intl.DateTimeFormat('id-ID', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(date);
+  const date = parseSafeDate(dateString);
+  if (!date) return String(dateString).split(',')[0] || String(dateString);
+  try {
+    return new Intl.DateTimeFormat('id-ID', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    }).format(date);
+  } catch {
+    return String(dateString);
+  }
+}
+
+export function formatDateTime(dateString: string | undefined | null): string {
+  if (!dateString) return '-';
+  const date = parseSafeDate(dateString);
+  if (!date) return String(dateString);
+  try {
+    return new Intl.DateTimeFormat('id-ID', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    }).format(date);
+  } catch {
+    return String(dateString);
+  }
 }
 
 /**

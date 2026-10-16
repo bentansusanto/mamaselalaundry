@@ -46,12 +46,14 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
   const [formPhone, setFormPhone] = useState('');
   const [formAddress, setFormAddress] = useState('');
 
-  const filtered = customers.filter(
-    (c) =>
-      c.name.toLowerCase().includes(search.toLowerCase()) ||
-      c.phone.includes(search) ||
-      (c.address && c.address.toLowerCase().includes(search.toLowerCase()))
-  );
+  const filtered = (customers || []).filter((c) => {
+    if (!c) return false;
+    const name = (c.name || '').toLowerCase();
+    const phone = c.phone || '';
+    const addr = (c.address || '').toLowerCase();
+    const q = (search || '').toLowerCase();
+    return name.includes(q) || phone.includes(q) || addr.includes(q);
+  });
 
   const handleOpenAdd = () => {
     setEditingCustomer(null);
@@ -195,25 +197,27 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex items-start gap-2.5">
                     <div className="w-9 h-9 rounded-xl bg-blue-50 border border-blue-100 text-blue-600 flex items-center justify-center font-bold text-xs shrink-0 mt-0.5">
-                      {cust.name.slice(0, 2).toUpperCase()}
+                      {(cust.name || 'Pelanggan').slice(0, 2).toUpperCase()}
                     </div>
                     <div>
                       <h3 className="font-bold text-xs text-slate-900 leading-tight">
-                        {cust.name}
+                        {cust.name || 'Pelanggan'}
                       </h3>
                       <div className="flex items-center gap-1.5 text-[11px] text-slate-600 mt-1">
                         <Phone className="w-3 h-3 text-slate-400 shrink-0" />
-                        <span>{cust.phone}</span>
-                        <a
-                          href={formatWhatsAppUrl(cust.phone)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          onClick={(e) => e.stopPropagation()}
-                          title="Chat WhatsApp"
-                          className="p-1 rounded-md text-emerald-600 hover:bg-emerald-50 transition"
-                        >
-                          <MessageCircle className="w-3.5 h-3.5" />
-                        </a>
+                        <span>{cust.phone || '-'}</span>
+                        {cust.phone && (
+                          <a
+                            href={formatWhatsAppUrl(cust.phone)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            title="Chat WhatsApp"
+                            className="p-1 rounded-md text-emerald-600 hover:bg-emerald-50 transition"
+                          >
+                            <MessageCircle className="w-3.5 h-3.5" />
+                          </a>
+                        )}
                       </div>
 
                       {cust.address && cust.address !== '-' && (

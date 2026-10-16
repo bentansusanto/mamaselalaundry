@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { Order } from '@/types';
-import { formatRupiah, formatDate } from '@/lib/utils';
+import { formatRupiah, formatDate, parseSafeDate } from '@/lib/utils';
 import { BarChart3, Download, TrendingUp, DollarSign, CreditCard, Scale, CheckCircle, Banknote, QrCode } from 'lucide-react';
 
 interface ReportsViewProps {
@@ -18,8 +18,10 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ orders }) => {
     const currentMonth = now.getMonth();
     const currentYear = now.getFullYear();
 
-    return orders.filter((o) => {
-      const orderDate = new Date(o.createdAt);
+    return (orders || []).filter((o) => {
+      if (!o) return false;
+      const orderDate = parseSafeDate(o.createdAt);
+      if (!orderDate) return false;
       if (filterPeriod === 'Month') {
         return (
           orderDate.getMonth() === currentMonth &&

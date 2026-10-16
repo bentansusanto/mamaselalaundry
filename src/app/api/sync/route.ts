@@ -1,12 +1,36 @@
 import { NextResponse } from 'next/server';
+import fs from 'fs';
+import path from 'path';
 
 // Server-side shared script URL cache across devices
 let sharedScriptUrl = process.env.GOOGLE_SCRIPT_URL || '';
+const CACHE_FILE = path.join('/tmp', 'mama_sela_sync_url.txt');
+
+function getCachedUrl(): string {
+  if (sharedScriptUrl) return sharedScriptUrl;
+  try {
+    if (fs.existsSync(CACHE_FILE)) {
+      const saved = fs.readFileSync(CACHE_FILE, 'utf-8').trim();
+      if (saved) {
+        sharedScriptUrl = saved;
+        return saved;
+      }
+    }
+  } catch {}
+  return '';
+}
+
+function saveCachedUrl(url: string) {
+  sharedScriptUrl = url;
+  try {
+    fs.writeFileSync(CACHE_FILE, url, 'utf-8');
+  } catch {}
+}
 
 export async function GET() {
   return NextResponse.json({
     success: true,
-    scriptUrl: sharedScriptUrl,
+    scriptUrl: getCachedUrl(),
   });
 }
 
@@ -15,7 +39,7 @@ export async function POST(req: Request) {
     const body = await req.json();
     let { scriptUrl, action, orders, customers, services, deletedQueue } = body;
 
-    const targetScriptUrl = (scriptUrl || sharedScriptUrl || '').trim();
+    const targetScriptUrl = (scriptUrl || getCachedUrl() || '').trim();
 
     if (!targetScriptUrl) {
       return NextResponse.json(
@@ -35,7 +59,7 @@ export async function POST(req: Request) {
     }
 
     // Remember scriptUrl across devices
-    sharedScriptUrl = targetUrl;
+    saveCachedUrl(targetUrl);
 
     // Server-to-server POST to Google Apps Script
     // Node.js follow 302 redirects automatically

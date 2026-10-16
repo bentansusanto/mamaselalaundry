@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import { SheetsConfig, SyncQueueItem } from '@/types';
 import { GOOGLE_APPS_SCRIPT_TEMPLATE } from '@/lib/sheetsSync';
 import { formatDateTime } from '@/lib/utils';
-import { Cloud, Check, Copy, RefreshCw, Database, Download, Upload, ExternalLink } from 'lucide-react';
+import { Cloud, Check, Copy, RefreshCw, Database, Download, Upload, ExternalLink, Smartphone, Share2 } from 'lucide-react';
 
 interface SyncSettingsViewProps {
   config: SheetsConfig;
@@ -26,6 +26,7 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
   const [scriptUrl, setScriptUrl] = useState(config.scriptUrl || '');
   const [autoSync, setAutoSync] = useState(config.autoSync ?? true);
   const [copied, setCopied] = useState(false);
+  const [copiedShareLink, setCopiedShareLink] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
 
   const handleSave = () => {
@@ -36,6 +37,18 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
     });
     setSavedSuccess(true);
     setTimeout(() => setSavedSuccess(false), 2500);
+  };
+
+  const handleCopyShareLink = () => {
+    if (!scriptUrl.trim()) {
+      alert('Isi dan simpan Google Apps Script URL terlebih dahulu!');
+      return;
+    }
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://mamaselalaundry.vercel.app';
+    const link = `${origin}/?sync_url=${encodeURIComponent(scriptUrl.trim())}`;
+    navigator.clipboard.writeText(link);
+    setCopiedShareLink(true);
+    setTimeout(() => setCopiedShareLink(false), 3000);
   };
 
   const handleCopyScript = () => {
@@ -132,6 +145,40 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
               )}
             </button>
           </div>
+
+          {/* 1-Click Cross Device Link for HP */}
+          {scriptUrl.trim() && (
+            <div className="mt-2 pt-2.5 border-t border-slate-200 bg-blue-50/70 p-3 rounded-xl border space-y-2">
+              <div className="flex items-center gap-1.5 text-blue-900 font-bold text-xs">
+                <Smartphone className="w-4 h-4 text-blue-600 shrink-0" />
+                <span>Hubungkan Aplikasi di HP (Auto-Sync)</span>
+              </div>
+              <p className="text-[11px] text-blue-800 leading-relaxed">
+                Salin tautan di bawah dan buka di HP atau kirim via WhatsApp. Aplikasi di HP akan langsung otomatis terhubung ke Spreadsheet yang sama!
+              </p>
+              <button
+                type="button"
+                onClick={handleCopyShareLink}
+                className={`w-full py-2 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm active:scale-95 ${
+                  copiedShareLink
+                    ? 'bg-emerald-600 text-white shadow-emerald-600/20'
+                    : 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-500/20'
+                }`}
+              >
+                {copiedShareLink ? (
+                  <>
+                    <Check className="w-4 h-4" />
+                    <span>Link Tersalin! Buka di browser HP Anda</span>
+                  </>
+                ) : (
+                  <>
+                    <Share2 className="w-4 h-4" />
+                    <span>Salin Link Buka di HP (Auto-Sync)</span>
+                  </>
+                )}
+              </button>
+            </div>
+          )}
         </div>
       </div>
 

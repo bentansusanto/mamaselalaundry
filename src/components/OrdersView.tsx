@@ -21,12 +21,18 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
   const [activeFilter, setActiveFilter] = useState<'Semua' | OrderProgressStatus>('Semua');
   const [search, setSearch] = useState('');
 
-  const filteredOrders = orders.filter((o) => {
+  const filteredOrders = (orders || []).filter((o) => {
+    if (!o) return false;
     const matchesFilter = activeFilter === 'Semua' ? true : o.progressStatus === activeFilter;
+    const custName = (o.customerName || '').toLowerCase();
+    const orderId = (o.id || '').toLowerCase();
+    const phone = o.customerPhone || '';
+    const q = (search || '').toLowerCase();
+
     const matchesSearch =
-      o.customerName.toLowerCase().includes(search.toLowerCase()) ||
-      o.id.toLowerCase().includes(search.toLowerCase()) ||
-      o.customerPhone.includes(search);
+      custName.includes(q) ||
+      orderId.includes(q) ||
+      phone.includes(q);
     return matchesFilter && matchesSearch;
   });
 
@@ -150,7 +156,7 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
                         {order.actualWeight} kg
                         {order.billedWeight !== order.actualWeight && ` (Min 3kg: ${order.billedWeight} kg)`}
                       </span>
-                      {order.items.length > 0 && ` + ${order.items.length} item satuan`}
+                      {(order.items || []).length > 0 && ` + ${(order.items || []).length} item satuan`}
                     </p>
                   </div>
 

@@ -8,6 +8,7 @@ import {
   saveSheetsConfig,
   getDB,
 } from './db';
+import { parseSafeDate } from './utils';
 
 export const GOOGLE_APPS_SCRIPT_TEMPLATE = `/**
  * Backend Google Apps Script - Mama Sela Laundry
@@ -230,7 +231,7 @@ function writeOrders(sheet, orders) {
         o.id || '',
         o.customerName || '',
         o.customerPhone || '',
-        o.createdAt ? new Date(o.createdAt).toLocaleString('id-ID') : '',
+        o.createdAt ? String(o.createdAt) : new Date().toISOString(),
         o.mainService || '',
         o.speed || 'Normal',
         o.actualWeight || 0,
@@ -262,7 +263,7 @@ function writeCustomers(sheet, customers) {
         c.name || '',
         c.phone || '',
         c.address || '-',
-        c.createdAt ? new Date(c.createdAt).toLocaleString('id-ID') : ''
+        c.createdAt ? String(c.createdAt) : new Date().toISOString()
       ]);
     }
     sheet.getRange(2, 1, rows.length, headers.length).setValues(rows);
@@ -463,7 +464,16 @@ export async function syncToGoogleSheets(): Promise<{ success: boolean; message:
           const txC = db.transaction('customers', 'readwrite');
           await txC.store.clear();
           for (const c of returnedData.customers) {
-            await txC.store.put(c);
+            if (c && c.id) {
+              const safeD = parseSafeDate(c.createdAt);
+              await txC.store.put({
+                id: String(c.id),
+                name: String(c.name || 'Pelanggan'),
+                phone: String(c.phone || ''),
+                address: String(c.address || '-'),
+                createdAt: safeD ? safeD.toISOString() : (c.createdAt ? String(c.createdAt) : new Date().toISOString()),
+              });
+            }
           }
           await txC.done;
         }
@@ -471,7 +481,33 @@ export async function syncToGoogleSheets(): Promise<{ success: boolean; message:
           const txO = db.transaction('orders', 'readwrite');
           await txO.store.clear();
           for (const o of returnedData.orders) {
-            await txO.store.put(o);
+            if (o && o.id) {
+              const safeD = parseSafeDate(o.createdAt);
+              await txO.store.put({
+                id: String(o.id),
+                customerId: String(o.customerId || ''),
+                customerName: String(o.customerName || 'Pelanggan'),
+                customerPhone: String(o.customerPhone || ''),
+                createdAt: safeD ? safeD.toISOString() : (o.createdAt ? String(o.createdAt) : new Date().toISOString()),
+                estimatedCompletion: o.estimatedCompletion ? String(o.estimatedCompletion) : new Date().toISOString(),
+                completedAt: o.completedAt ? String(o.completedAt) : undefined,
+                mainService: String(o.mainService || 'Cuci'),
+                speed: o.speed || 'Normal',
+                speedFee: Number(o.speedFee) || 0,
+                actualWeight: Number(o.actualWeight) || 0,
+                billedWeight: Number(o.billedWeight) || 0,
+                items: Array.isArray(o.items) ? o.items : [],
+                mainServiceTotal: Number(o.mainServiceTotal) || (Number(o.totalPrice) || 0),
+                itemsTotal: Number(o.itemsTotal) || 0,
+                totalPrice: Number(o.totalPrice) || 0,
+                paymentStatus: o.paymentStatus || 'Belum Bayar',
+                paymentMethod: o.paymentMethod || 'Cash',
+                paymentDate: o.paymentDate ? String(o.paymentDate) : undefined,
+                progressStatus: o.progressStatus || 'Proses',
+                notes: o.notes || '',
+                cashierName: o.cashierName || 'Mama Sela',
+              });
+            }
           }
           await txO.done;
         }
@@ -479,7 +515,9 @@ export async function syncToGoogleSheets(): Promise<{ success: boolean; message:
           const txS = db.transaction('services', 'readwrite');
           await txS.store.clear();
           for (const s of returnedData.services) {
-            await txS.store.put(s);
+            if (s && s.id) {
+              await txS.store.put(s);
+            }
           }
           await txS.done;
         }

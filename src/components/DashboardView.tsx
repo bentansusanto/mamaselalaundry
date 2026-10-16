@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { Customer, Order, ServiceItem } from '@/types';
-import { formatRupiah, formatDateTime } from '@/lib/utils';
+import { formatRupiah, formatDateTime, parseSafeDate } from '@/lib/utils';
 import { TrendingUp, Users, ShoppingBag, ArrowUpRight, Clock, Star, Plus, Sparkles } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -32,9 +32,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [chartPeriod, setChartPeriod] = useState<'Month' | 'Quarter' | 'Years'>('Month');
 
   // Stats calculation
-  const totalRevenue = orders.reduce((sum, o) => sum + (o.paymentStatus === 'Lunas' ? o.totalPrice : 0), 0);
-  const activeOrders = orders.filter((o) => o.progressStatus !== 'Selesai');
-  const totalOrdersCount = orders.length;
+  const totalRevenue = (orders || []).reduce(
+    (sum, o) => sum + (o.paymentStatus === 'Lunas' ? (o.totalPrice || 0) : 0),
+    0
+  );
+  const activeOrders = (orders || []).filter((o) => o.progressStatus !== 'Selesai');
+  const totalOrdersCount = (orders || []).length;
 
   // Chart Data preparation based on Period
   const chartData = React.useMemo(() => {
@@ -50,11 +53,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         daysMap[dayLabel] = 0;
       }
 
-      orders.forEach((o) => {
-        const d = new Date(o.createdAt);
-        const dayLabel = `${d.getDate()}/${d.getMonth() + 1}`;
-        if (daysMap[dayLabel] !== undefined) {
-          daysMap[dayLabel] += o.totalPrice;
+      (orders || []).forEach((o) => {
+        const d = parseSafeDate(o.createdAt);
+        if (d) {
+          const dayLabel = `${d.getDate()}/${d.getMonth() + 1}`;
+          if (daysMap[dayLabel] !== undefined) {
+            daysMap[dayLabel] += o.totalPrice || 0;
+          }
         }
       });
 
@@ -66,11 +71,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       const quarterMonths = ['Bln 1', 'Bln 2', 'Bln 3'];
       const dataMap = { 'Bln 1': 0, 'Bln 2': 0, 'Bln 3': 0 };
 
-      orders.forEach((o) => {
-        const month = new Date(o.createdAt).getMonth();
-        const qIndex = month % 3;
-        const key = quarterMonths[qIndex] as keyof typeof dataMap;
-        dataMap[key] += o.totalPrice;
+      (orders || []).forEach((o) => {
+        const d = parseSafeDate(o.createdAt);
+        if (d) {
+          const month = d.getMonth();
+          const qIndex = month % 3;
+          const key = quarterMonths[qIndex] as keyof typeof dataMap;
+          dataMap[key] += o.totalPrice || 0;
+        }
       });
 
       return Object.entries(dataMap).map(([name, total]) => ({ name, total }));
@@ -79,10 +87,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     // Years (Last 4 Months)
     const monthNames = ['Agu', 'Sep', 'Okt', 'Nov'];
     const yearMap: Record<string, number> = { Agu: 45000, Sep: 85000, Okt: 120000, Nov: 0 };
-    orders.forEach((o) => {
-      const m = new Date(o.createdAt).toLocaleString('id-ID', { month: 'short' });
-      if (yearMap[m] !== undefined) {
-        yearMap[m] += o.totalPrice;
+    (orders || []).forEach((o) => {
+      const d = parseSafeDate(o.createdAt);
+      if (d) {
+        try {
+          const m = d.toLocaleString('id-ID', { month: 'short' });
+          if (yearMap[m] !== undefined) {
+            yearMap[m] += o.totalPrice || 0;
+          }
+        } catch {}
       }
     });
 
@@ -92,12 +105,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   // Top Services calculation
   const topServices = React.useMemo(() => {
     const counts: Record<string, number> = {};
-    orders.forEach((o) => {
+    (orders || []).forEach((o) => {
       if (o.mainService) {
         counts[o.mainService] = (counts[o.mainService] || 0) + 1;
       }
-      o.items.forEach((item) => {
-        counts[item.name] = (counts[item.name] || 0) + item.qty;
+      (o.items || []).forEach((item) => {
+        if (item && item.name) {
+          counts[item.name] = (counts[item.name] || 0) + (item.qty || 1);
+        }
       });
     });
 
