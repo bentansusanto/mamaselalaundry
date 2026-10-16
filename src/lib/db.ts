@@ -167,6 +167,13 @@ export async function saveOrder(order: Order): Promise<void> {
   await queueSync('orders', 'update', order);
 }
 
+export async function deleteOrder(id: string): Promise<void> {
+  const db = await getDB();
+  if (!db) return;
+  await db.delete('orders', id);
+  await queueSync('orders', 'delete', { id });
+}
+
 export async function getAllCustomers(): Promise<Customer[]> {
   const db = await getDB();
   if (!db) return [];

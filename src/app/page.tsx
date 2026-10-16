@@ -19,6 +19,15 @@ import {
   getSyncQueue,
 } from '@/lib/db';
 import { syncToGoogleSheets } from '@/lib/sheetsSync';
+import {
+  pullFromSupabase,
+  subscribeToSupabaseRealtime,
+  syncCustomerToSupabase,
+  deleteCustomerFromSupabase,
+  syncOrderToSupabase,
+  syncServiceToSupabase,
+  deleteServiceFromSupabase,
+} from '@/lib/supabaseSync';
 import { INITIAL_USERS } from '@/lib/initialData';
 import { Navbar } from '@/components/Navbar';
 import { BottomNav, NavTab } from '@/components/BottomNav';
@@ -149,6 +158,18 @@ export default function Home() {
       setSheetsConfig(loadedConfig);
       setSyncQueue(loadedQueue);
 
+      // Pull newest data from Supabase
+      if (typeof window !== 'undefined' && navigator.onLine) {
+        try {
+          const supaData = await pullFromSupabase();
+          if (supaData.customers.length > 0) setCustomers(supaData.customers);
+          if (supaData.orders.length > 0) setOrders(supaData.orders);
+          if (supaData.services.length > 0) setServices(supaData.services);
+        } catch (supaErr) {
+          console.warn('Initial Supabase pull error:', supaErr);
+        }
+      }
+
       // Background two-way sync on launch to pull newest data from Google Sheets
       if (loadedConfig.scriptUrl && loadedConfig.autoSync) {
         try {
@@ -235,6 +256,16 @@ export default function Home() {
     document.addEventListener('visibilitychange', performBackgroundSync);
     const syncInterval = setInterval(performBackgroundSync, 3000);
 
+    // Supabase Instant Realtime Subscription (< 100ms)
+    const unsubscribeSupabase = subscribeToSupabaseRealtime(async () => {
+      const freshOrders = await getAllOrders();
+      const freshCustomers = await getAllCustomers();
+      const freshServices = await getAllServices();
+      setOrders(freshOrders);
+      setCustomers(freshCustomers);
+      setServices(freshServices);
+    });
+
     return () => {
       window.removeEventListener('beforeinstallprompt', handleBeforeInstall);
       window.removeEventListener('appinstalled', handleAppInstalled);
@@ -243,6 +274,7 @@ export default function Home() {
       window.removeEventListener('focus', performBackgroundSync);
       document.removeEventListener('visibilitychange', performBackgroundSync);
       clearInterval(syncInterval);
+      unsubscribeSupabase();
     };
   }, []);
 
@@ -310,14 +342,12 @@ export default function Home() {
     const queue = await getSyncQueue();
     setSyncQueue(queue);
 
+    // Instant Realtime sync to Supabase
+    syncOrderToSupabase(order);
+
     // Auto sync if online and enabled
-    if (isOnline && sheetsConfig.scriptUrl && sheetsConfig.autoSync) {
+    if (isOnline && sheetsConfig.autoSync) {
       handleTriggerSync();
-    } else if (!sheetsConfig.scriptUrl) {
-      showNotice(
-        `Order #${order.id} tersimpan di HP. Sambungkan Google Sheets di menu Sinkronisasi agar tersimpan ke Spreadsheet.`,
-        'warning'
-      );
     } else {
       showNotice(`Order #${order.id} berhasil dibuat!`, 'success');
     }
@@ -334,13 +364,14 @@ export default function Home() {
       completedAt: nextStatus === 'Selesai' ? new Date().toISOString() : order.completedAt,
     };
     await saveOrder(updatedOrder);
+    syncOrderToSupabase(updatedOrder);
     const updated = await getAllOrders();
     setOrders(updated);
     const queue = await getSyncQueue();
     setSyncQueue(queue);
     showNotice(`Status pesanan diperbarui: ${nextStatus}`, 'success');
 
-    if (isOnline && sheetsConfig.scriptUrl && sheetsConfig.autoSync) {
+    if (isOnline && sheetsConfig.autoSync) {
       handleTriggerSync();
     }
   };
@@ -354,13 +385,14 @@ export default function Home() {
       paymentDate: paymentStatus === 'Lunas' ? new Date().toISOString() : undefined,
     };
     await saveOrder(updatedOrder);
+    syncOrderToSupabase(updatedOrder);
     const updated = await getAllOrders();
     setOrders(updated);
     const queue = await getSyncQueue();
     setSyncQueue(queue);
     showNotice(`Pembayaran diperbarui: ${paymentStatus}`, 'success');
 
-    if (isOnline && sheetsConfig.scriptUrl && sheetsConfig.autoSync) {
+    if (isOnline && sheetsConfig.autoSync) {
       handleTriggerSync();
     }
   };
@@ -372,6 +404,9 @@ export default function Home() {
     setCustomers(updated);
     const queue = await getSyncQueue();
     setSyncQueue(queue);
+
+    // Instant Realtime sync to Supabase
+    syncCustomerToSupabase(cust);
 
     if (isOnline && sheetsConfig.autoSync) {
       handleTriggerSync();
@@ -387,6 +422,10 @@ export default function Home() {
     setCustomers(updated);
     const queue = await getSyncQueue();
     setSyncQueue(queue);
+
+    // Instant Realtime sync to Supabase
+    deleteCustomerFromSupabase(id);
+
     showNotice(`Pelanggan ${cust ? cust.name : ''} berhasil dihapus!`, 'warning');
 
     if (isOnline && sheetsConfig.autoSync) {
@@ -401,6 +440,10 @@ export default function Home() {
     setServices(updated);
     const queue = await getSyncQueue();
     setSyncQueue(queue);
+
+    // Instant Realtime sync to Supabase
+    syncServiceToSupabase(service);
+
     showNotice(`Layanan ${service.name} tersimpan!`, 'success');
 
     if (isOnline && sheetsConfig.autoSync) {
@@ -414,6 +457,10 @@ export default function Home() {
     setServices(updated);
     const queue = await getSyncQueue();
     setSyncQueue(queue);
+
+    // Instant Realtime sync to Supabase
+    deleteServiceFromSupabase(id);
+
     showNotice('Layanan berhasil dihapus', 'warning');
 
     if (isOnline && sheetsConfig.autoSync) {
