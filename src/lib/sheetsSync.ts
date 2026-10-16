@@ -1,23 +1,19 @@
-import { getAllCustomers, getAllOrders, getAllServices, getSheetsConfig, getSyncQueue, clearSyncQueue, saveSheetsConfig } from './db';
+import {
+  getAllCustomers,
+  getAllOrders,
+  getAllServices,
+  getSheetsConfig,
+  getSyncQueue,
+  clearSyncQueue,
+  saveSheetsConfig,
+  getDB,
+} from './db';
 
 export const GOOGLE_APPS_SCRIPT_TEMPLATE = `/**
- * Google Apps Script Backend for Mama Sela Laundry PWA
- * 
- * PETUNJUK SETUP:
- * 1. Di Google Sheets Anda, pastikan ada 3 tab:
- *    - Orders
- *    - Customers
- *    - Services
- * 2. Paste SELURUH kode ini ke Google Apps Script editor.
- * 3. Klik tombol Simpan (ikon disket / Ctrl+S).
- * 4. Untuk MENGETES di editor: Pilih fungsi "testSync" di atas, lalu klik "Jalankan".
- * 5. Untuk MENERAPKAN: Klik "Terapkan" (Deploy) > "Penerapan baru" (New deployment).
- *    - Jenis: "Aplikasi web" (Web app).
- *    - Yang memiliki akses: "Siapa saja" (Anyone) -> WAJIB!
- * 6. Salin Web app URL (/exec) dan paste ke aplikasi Mama Sela.
+ * Backend Google Apps Script - Mama Sela Laundry
+ * Mendukung Sinkronisasi Otomatis 2 Arah (HP & Laptop)
  */
 
-// ID Spreadsheet Google Sheets Anda (Otomatis dipakai jika script dibuat terpisah/standalone)
 var SPREADSHEET_ID = "1_6yVfCk8wjZ-obnEuwXCh_IynU_8bYrxSQG_wN-ELxc";
 
 function getSpreadsheet(data) {
@@ -35,60 +31,12 @@ function getSpreadsheet(data) {
   return ss;
 }
 
-// Fungsi ini BISA diklik tombol "Jalankan" / "Debug" langsung di editor untuk tes:
-function testSync() {
-  var ss = getSpreadsheet();
-  if (!ss) {
-    Logger.log("ERROR: Spreadsheet tidak ditemukan. Periksa SPREADSHEET_ID.");
-    return;
-  }
-  syncOrders(ss, [
-    {
-      id: 'ORD-TEST-001',
-      customerName: 'Pelanggan Tes',
-      customerPhone: '08123456789',
-      createdAt: new Date().toISOString(),
-      mainService: 'Cuci setrika',
-      speed: 'Normal',
-      actualWeight: 3.0,
-      billedWeight: 3.0,
-      items: [],
-      totalPrice: 18000,
-      paymentStatus: 'Lunas',
-      paymentMethod: 'Cash',
-      progressStatus: 'Selesai',
-      cashierName: 'Mama Sela'
-    }
-  ]);
-  syncCustomers(ss, [
-    {
-      id: 'CUST-001',
-      name: 'Pelanggan Tes',
-      phone: '08123456789',
-      address: 'Jl. Contoh No. 1',
-      createdAt: new Date().toISOString()
-    }
-  ]);
-  syncServices(ss, [
-    {
-      id: 'SRV-01',
-      name: 'Cuci setrika',
-      category: 'Kiloan',
-      unit: 'kg',
-      price: 6000,
-      hpp: 2500,
-      profitMarginPercent: 58
-    }
-  ]);
-  Logger.log("SUKSES: Data tes berhasil ditulis ke Spreadsheet!");
-}
-
 function doPost(e) {
   try {
     if (!e || !e.postData || !e.postData.contents) {
       return ContentService.createTextOutput(JSON.stringify({
         status: 'error',
-        message: 'Tidak ada data payload yang diterima. Catatan: Untuk tes di editor, pilih fungsi testSync() lalu klik Jalankan.'
+        message: 'Tidak ada payload data.'
       })).setMimeType(ContentService.MimeType.JSON);
     }
 
@@ -99,24 +47,40 @@ function doPost(e) {
     if (!ss) {
       return ContentService.createTextOutput(JSON.stringify({
         status: 'error',
-        message: 'Spreadsheet tidak ditemukan. Pastikan SPREADSHEET_ID sudah benar.'
+        message: 'Spreadsheet tidak ditemukan. Periksa SPREADSHEET_ID.'
       })).setMimeType(ContentService.MimeType.JSON);
     }
 
     if (action === 'sync') {
-      var orders = data.orders || [];
-      var customers = data.customers || [];
-      var services = data.services || [];
+      var incomingOrders = data.orders || [];
+      var incomingCustomers = data.customers || [];
+      var incomingServices = data.services || [];
+      var deletedQueue = data.deletedQueue || [];
 
-      // Always write headers and data to all 3 tabs
-      syncOrders(ss, orders);
-      syncCustomers(ss, customers);
-      syncServices(ss, services);
+      var deletedCustomerIds = [];
+      var deletedOrderIds = [];
+      for (var d = 0; d < deletedQueue.length; d++) {
+        var item = deletedQueue[d];
+        if (item.entity === 'customers' && item.data && item.data.id) {
+          deletedCustomerIds.push(item.data.id);
+        } else if (item.entity === 'orders' && item.data && item.data.id) {
+          deletedOrderIds.push(item.data.id);
+        }
+      }
+
+      var allOrders = mergeOrders(ss, incomingOrders, deletedOrderIds);
+      var allCustomers = mergeCustomers(ss, incomingCustomers, deletedCustomerIds);
+      var allServices = mergeServices(ss, incomingServices);
 
       return ContentService.createTextOutput(JSON.stringify({
         status: 'success',
         syncedAt: new Date().toISOString(),
-        message: 'Data berhasil disinkronkan ke Google Sheets (' + orders.length + ' Order, ' + customers.length + ' Pelanggan, ' + services.length + ' Layanan)'
+        message: 'Data berhasil disinkronkan (' + allOrders.length + ' Order, ' + allCustomers.length + ' Pelanggan, ' + allServices.length + ' Layanan)',
+        data: {
+          orders: allOrders,
+          customers: allCustomers,
+          services: allServices
+        }
       })).setMimeType(ContentService.MimeType.JSON);
     }
 
@@ -142,9 +106,9 @@ function doGet(e) {
       })).setMimeType(ContentService.MimeType.JSON);
     }
 
-    var orders = getSheetData(ss, 'Orders');
-    var customers = getSheetData(ss, 'Customers');
-    var services = getSheetData(ss, 'Services');
+    var orders = getSheetOrders(ss);
+    var customers = getSheetCustomers(ss);
+    var services = getSheetServices(ss);
 
     return ContentService.createTextOutput(JSON.stringify({
       status: 'success',
@@ -160,11 +124,92 @@ function doGet(e) {
   }
 }
 
-function syncOrders(ss, orders) {
+function mergeCustomers(ss, incoming, deletedIds) {
+  var sheet = ss.getSheetByName('Customers') || ss.insertSheet('Customers');
+  var existing = getSheetCustomers(ss);
+  var map = {};
+
+  for (var i = 0; i < existing.length; i++) {
+    var c = existing[i];
+    if (c.id) map[c.id] = c;
+  }
+
+  for (var j = 0; j < (incoming || []).length; j++) {
+    var inc = incoming[j];
+    if (inc && inc.id) map[inc.id] = inc;
+  }
+
+  for (var k = 0; k < (deletedIds || []).length; k++) {
+    delete map[deletedIds[k]];
+  }
+
+  var merged = [];
+  for (var id in map) {
+    merged.push(map[id]);
+  }
+
+  writeCustomers(sheet, merged);
+  return merged;
+}
+
+function mergeOrders(ss, incoming, deletedIds) {
   var sheet = ss.getSheetByName('Orders') || ss.insertSheet('Orders');
+  var existing = getSheetOrders(ss);
+  var map = {};
+
+  for (var i = 0; i < existing.length; i++) {
+    var o = existing[i];
+    if (o.id) map[o.id] = o;
+  }
+
+  for (var j = 0; j < (incoming || []).length; j++) {
+    var inc = incoming[j];
+    if (inc && inc.id) map[inc.id] = inc;
+  }
+
+  for (var k = 0; k < (deletedIds || []).length; k++) {
+    delete map[deletedIds[k]];
+  }
+
+  var merged = [];
+  for (var id in map) {
+    merged.push(map[id]);
+  }
+
+  merged.sort(function(a, b) {
+    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+  });
+
+  writeOrders(sheet, merged);
+  return merged;
+}
+
+function mergeServices(ss, incoming) {
+  var sheet = ss.getSheetByName('Services') || ss.insertSheet('Services');
+  var existing = getSheetServices(ss);
+  var map = {};
+
+  for (var i = 0; i < existing.length; i++) {
+    var s = existing[i];
+    if (s.id) map[s.id] = s;
+  }
+
+  for (var j = 0; j < (incoming || []).length; j++) {
+    var inc = incoming[j];
+    if (inc && inc.id) map[inc.id] = inc;
+  }
+
+  var merged = [];
+  for (var id in map) {
+    merged.push(map[id]);
+  }
+
+  writeServices(sheet, merged);
+  return merged;
+}
+
+function writeOrders(sheet, orders) {
   sheet.clearContents();
-  
-  // Headers
   var headers = [
     'ID Order', 'Pelanggan', 'No HP', 'Tanggal Masuk', 'Layanan Utama', 
     'Kecepatan', 'Berat Real (Kg)', 'Berat Dihitung (Kg)', 'Rincian Item', 
@@ -202,10 +247,8 @@ function syncOrders(ss, orders) {
   }
 }
 
-function syncCustomers(ss, customers) {
-  var sheet = ss.getSheetByName('Customers') || ss.insertSheet('Customers');
+function writeCustomers(sheet, customers) {
   sheet.clearContents();
-  
   var headers = ['ID Pelanggan', 'Nama Pelanggan', 'No HP / WhatsApp', 'Alamat', 'Tanggal Terdaftar'];
   sheet.appendRow(headers);
   sheet.getRange(1, 1, 1, headers.length).setFontWeight('bold').setBackground('#E2E8F0');
@@ -226,10 +269,8 @@ function syncCustomers(ss, customers) {
   }
 }
 
-function syncServices(ss, services) {
-  var sheet = ss.getSheetByName('Services') || ss.insertSheet('Services');
+function writeServices(sheet, services) {
   sheet.clearContents();
-  
   var headers = ['ID Layanan', 'Nama Layanan', 'Kategori', 'Satuan', 'Harga Jual (Rp)', 'HPP (Rp)', 'Profit Margin %'];
   sheet.appendRow(headers);
   sheet.getRange(1, 1, 1, headers.length).setFontWeight('bold').setBackground('#E2E8F0');
@@ -252,19 +293,76 @@ function syncServices(ss, services) {
   }
 }
 
-function getSheetData(ss, sheetName) {
-  var sheet = ss.getSheetByName(sheetName);
+function getSheetCustomers(ss) {
+  var sheet = ss.getSheetByName('Customers');
   if (!sheet) return [];
   var rows = sheet.getDataRange().getValues();
   if (rows.length <= 1) return [];
-  var headers = rows[0];
   var result = [];
   for (var i = 1; i < rows.length; i++) {
-    var obj = {};
-    for (var j = 0; j < headers.length; j++) {
-      obj[headers[j]] = rows[i][j];
+    var r = rows[i];
+    if (r[0]) {
+      result.push({
+        id: String(r[0]),
+        name: String(r[1] || ''),
+        phone: String(r[2] || ''),
+        address: String(r[3] || '-'),
+        createdAt: r[4] ? String(r[4]) : new Date().toISOString()
+      });
     }
-    result.push(obj);
+  }
+  return result;
+}
+
+function getSheetOrders(ss) {
+  var sheet = ss.getSheetByName('Orders');
+  if (!sheet) return [];
+  var rows = sheet.getDataRange().getValues();
+  if (rows.length <= 1) return [];
+  var result = [];
+  for (var i = 1; i < rows.length; i++) {
+    var r = rows[i];
+    if (r[0]) {
+      result.push({
+        id: String(r[0]),
+        customerName: String(r[1] || ''),
+        customerPhone: String(r[2] || ''),
+        createdAt: r[3] ? String(r[3]) : new Date().toISOString(),
+        mainService: String(r[4] || ''),
+        speed: String(r[5] || 'Normal'),
+        actualWeight: parseFloat(r[6]) || 0,
+        billedWeight: parseFloat(r[7]) || 0,
+        items: [],
+        totalPrice: parseFloat(r[9]) || 0,
+        paymentStatus: String(r[10] || 'Belum Bayar'),
+        paymentMethod: String(r[11] || 'Cash'),
+        progressStatus: String(r[12] || 'Proses'),
+        cashierName: String(r[13] || 'Mama Sela')
+      });
+    }
+  }
+  return result;
+}
+
+function getSheetServices(ss) {
+  var sheet = ss.getSheetByName('Services');
+  if (!sheet) return [];
+  var rows = sheet.getDataRange().getValues();
+  if (rows.length <= 1) return [];
+  var result = [];
+  for (var i = 1; i < rows.length; i++) {
+    var r = rows[i];
+    if (r[0]) {
+      result.push({
+        id: String(r[0]),
+        name: String(r[1] || ''),
+        category: String(r[2] || 'Kiloan'),
+        unit: String(r[3] || 'kg'),
+        price: parseFloat(r[4]) || 0,
+        hpp: parseFloat(r[5]) || 0,
+        profitMarginPercent: parseFloat(r[6]) || 0
+      });
+    }
   }
   return result;
 }
@@ -272,25 +370,33 @@ function getSheetData(ss, sheetName) {
 
 export async function syncToGoogleSheets(): Promise<{ success: boolean; message: string }> {
   try {
-    const config = await getSheetsConfig();
+    let config = await getSheetsConfig();
     const orders = await getAllOrders();
     const customers = await getAllCustomers();
     const services = await getAllServices();
+    const queue = await getSyncQueue();
 
     let scriptUrl = config.scriptUrl ? config.scriptUrl.trim() : '';
 
+    // If scriptUrl is empty locally, check if server proxy has remembered one
     if (!scriptUrl) {
-      // Local sync simulation when URL is not configured yet
+      try {
+        const checkRes = await fetch('/api/sync');
+        const checkData = await checkRes.json();
+        if (checkData?.scriptUrl) {
+          scriptUrl = checkData.scriptUrl;
+          config = { ...config, scriptUrl };
+          await saveSheetsConfig(config);
+        }
+      } catch (err) {}
+    }
+
+    if (!scriptUrl) {
       const now = new Date().toISOString();
       await saveSheetsConfig({ ...config, lastSyncedAt: now });
-      const queue = await getSyncQueue();
-      if (queue.length > 0) {
-        await clearSyncQueue(queue.map((q) => q.id));
-      }
       return {
-        success: true,
-        message:
-          'Data tersimpan di perangkat (IndexedDB). Masukkan URL Web App Google Apps Script di menu pengaturan untuk sinkronisasi ke spreadsheet.',
+        success: false,
+        message: 'URL Google Apps Script belum diatur pada perangkat ini.',
       };
     }
 
@@ -303,9 +409,8 @@ export async function syncToGoogleSheets(): Promise<{ success: boolean; message:
       }
     }
 
-    // Try server-side proxy route first (/api/sync) for robust CORS & redirect handling
-    let proxyWorked = false;
     let proxyMessage = '';
+    let returnedData: any = null;
 
     try {
       const apiRes = await fetch('/api/sync', {
@@ -318,13 +423,14 @@ export async function syncToGoogleSheets(): Promise<{ success: boolean; message:
           orders,
           customers,
           services,
+          deletedQueue: queue.filter((q) => q.action === 'delete'),
         }),
       });
 
       const apiData = await apiRes.json();
       if (apiRes.ok && apiData.success) {
-        proxyWorked = true;
-        proxyMessage = apiData.message || 'Data berhasil dikirim ke Google Sheets!';
+        proxyMessage = apiData.message || 'Data berhasil disinkronkan ke Google Sheets!';
+        returnedData = apiData.data;
       } else {
         return {
           success: false,
@@ -333,15 +439,9 @@ export async function syncToGoogleSheets(): Promise<{ success: boolean; message:
       }
     } catch (apiErr) {
       console.warn('API /api/sync fallback to direct fetch:', apiErr);
-    }
-
-    // Direct browser fetch fallback if offline from Next.js server
-    if (!proxyWorked) {
       await fetch(scriptUrl, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'text/plain;charset=utf-8',
-        },
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         mode: 'no-cors',
         body: JSON.stringify({
           action: 'sync',
@@ -349,16 +449,46 @@ export async function syncToGoogleSheets(): Promise<{ success: boolean; message:
           orders,
           customers,
           services,
+          deletedQueue: queue.filter((q) => q.action === 'delete'),
         }),
       });
       proxyMessage = 'Data berhasil dikirim ke Google Sheets!';
     }
 
+    // Update local IndexedDB with merged two-way data returned from Google Sheets
+    if (returnedData) {
+      const db = await getDB();
+      if (db) {
+        if (Array.isArray(returnedData.customers)) {
+          const txC = db.transaction('customers', 'readwrite');
+          await txC.store.clear();
+          for (const c of returnedData.customers) {
+            await txC.store.put(c);
+          }
+          await txC.done;
+        }
+        if (Array.isArray(returnedData.orders)) {
+          const txO = db.transaction('orders', 'readwrite');
+          await txO.store.clear();
+          for (const o of returnedData.orders) {
+            await txO.store.put(o);
+          }
+          await txO.done;
+        }
+        if (Array.isArray(returnedData.services) && returnedData.services.length > 0) {
+          const txS = db.transaction('services', 'readwrite');
+          await txS.store.clear();
+          for (const s of returnedData.services) {
+            await txS.store.put(s);
+          }
+          await txS.done;
+        }
+      }
+    }
+
     const now = new Date().toISOString();
     await saveSheetsConfig({ ...config, scriptUrl, lastSyncedAt: now });
 
-    // Clear queue upon successful sync
-    const queue = await getSyncQueue();
     if (queue.length > 0) {
       await clearSyncQueue(queue.map((q) => q.id));
     }

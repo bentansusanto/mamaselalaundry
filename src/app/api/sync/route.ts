@@ -1,11 +1,23 @@
 import { NextResponse } from 'next/server';
 
+// Server-side shared script URL cache across devices
+let sharedScriptUrl = process.env.GOOGLE_SCRIPT_URL || '';
+
+export async function GET() {
+  return NextResponse.json({
+    success: true,
+    scriptUrl: sharedScriptUrl,
+  });
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    let { scriptUrl, action, orders, customers, services } = body;
+    let { scriptUrl, action, orders, customers, services, deletedQueue } = body;
 
-    if (!scriptUrl || typeof scriptUrl !== 'string' || scriptUrl.trim() === '') {
+    const targetScriptUrl = (scriptUrl || sharedScriptUrl || '').trim();
+
+    if (!targetScriptUrl) {
       return NextResponse.json(
         { success: false, message: 'URL Google Apps Script belum diisi.' },
         { status: 400 }
@@ -13,7 +25,7 @@ export async function POST(req: Request) {
     }
 
     // Auto-fix URL: ensure it uses /exec instead of /edit or trailing slash
-    let targetUrl = scriptUrl.trim();
+    let targetUrl = targetScriptUrl;
     if (targetUrl.includes('/macros/s/')) {
       if (targetUrl.includes('/edit')) {
         targetUrl = targetUrl.replace(/\/edit.*$/, '/exec');
@@ -21,6 +33,9 @@ export async function POST(req: Request) {
         targetUrl = targetUrl.replace(/\/?$/, '/exec');
       }
     }
+
+    // Remember scriptUrl across devices
+    sharedScriptUrl = targetUrl;
 
     // Server-to-server POST to Google Apps Script
     // Node.js follow 302 redirects automatically
@@ -30,6 +45,7 @@ export async function POST(req: Request) {
       orders: orders || [],
       customers: customers || [],
       services: services || [],
+      deletedQueue: deletedQueue || [],
     });
 
     const googleResponse = await fetch(targetUrl, {
@@ -66,6 +82,8 @@ export async function POST(req: Request) {
         success: true,
         message: data.message || 'Data berhasil disinkronkan ke Google Sheets!',
         syncedAt: data.syncedAt,
+        data: data.data || null,
+        scriptUrl: targetUrl,
       });
     }
 
@@ -84,6 +102,8 @@ export async function POST(req: Request) {
       return NextResponse.json({
         success: true,
         message: 'Data berhasil dikirim ke Google Sheets!',
+        data: data?.data || null,
+        scriptUrl: targetUrl,
       });
     }
 

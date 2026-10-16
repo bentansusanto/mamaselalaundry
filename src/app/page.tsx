@@ -62,11 +62,24 @@ export default function Home() {
   useEffect(() => {
     async function loadData() {
       await initDatabaseDefaults();
+      let loadedConfig = await getSheetsConfig();
+
+      // If local device doesn't have scriptUrl yet, fetch shared scriptUrl from server
+      if (!loadedConfig.scriptUrl) {
+        try {
+          const res = await fetch('/api/sync');
+          const data = await res.json();
+          if (data?.scriptUrl) {
+            loadedConfig = { ...loadedConfig, scriptUrl: data.scriptUrl };
+            await saveSheetsConfig(loadedConfig);
+          }
+        } catch (e) {}
+      }
+
       const loadedOrders = await getAllOrders();
       const loadedCustomers = await getAllCustomers();
       const loadedServices = await getAllServices();
       const loadedUsers = await getAllUsers();
-      const loadedConfig = await getSheetsConfig();
       const loadedQueue = await getSyncQueue();
 
       setOrders(loadedOrders);
@@ -78,6 +91,20 @@ export default function Home() {
       }
       setSheetsConfig(loadedConfig);
       setSyncQueue(loadedQueue);
+
+      // Background two-way sync on launch to pull newest data from Google Sheets
+      if (loadedConfig.scriptUrl && loadedConfig.autoSync) {
+        syncToGoogleSheets().then(async (res) => {
+          if (res.success) {
+            const freshOrders = await getAllOrders();
+            const freshCustomers = await getAllCustomers();
+            const freshServices = await getAllServices();
+            setOrders(freshOrders);
+            setCustomers(freshCustomers);
+            setServices(freshServices);
+          }
+        });
+      }
     }
 
     loadData();
@@ -169,7 +196,13 @@ export default function Home() {
     if (result.success) {
       showNotice(result.message, 'success');
       const updatedConfig = await getSheetsConfig();
+      const updatedOrders = await getAllOrders();
+      const updatedCustomers = await getAllCustomers();
+      const updatedServices = await getAllServices();
       setSheetsConfig(updatedConfig);
+      setOrders(updatedOrders);
+      setCustomers(updatedCustomers);
+      setServices(updatedServices);
       setSyncQueue([]);
     } else {
       showNotice(result.message, 'warning');
@@ -185,7 +218,7 @@ export default function Home() {
     setSyncQueue(queue);
 
     // Auto sync if online and enabled
-    if (isOnline && sheetsConfig.autoSync && sheetsConfig.scriptUrl) {
+    if (isOnline && sheetsConfig.autoSync) {
       handleTriggerSync();
     }
 
@@ -207,6 +240,10 @@ export default function Home() {
     const queue = await getSyncQueue();
     setSyncQueue(queue);
     showNotice(`Status pesanan diperbarui: ${nextStatus}`, 'success');
+
+    if (isOnline && sheetsConfig.autoSync) {
+      handleTriggerSync();
+    }
   };
 
   const handleUpdatePaymentStatus = async (orderId: string, paymentStatus: PaymentStatus) => {
@@ -223,6 +260,10 @@ export default function Home() {
     const queue = await getSyncQueue();
     setSyncQueue(queue);
     showNotice(`Pembayaran diperbarui: ${paymentStatus}`, 'success');
+
+    if (isOnline && sheetsConfig.autoSync) {
+      handleTriggerSync();
+    }
   };
 
   // Customer Handlers
@@ -233,6 +274,10 @@ export default function Home() {
     const queue = await getSyncQueue();
     setSyncQueue(queue);
     showNotice(`Pelanggan ${cust.name} tersimpan!`, 'success');
+
+    if (isOnline && sheetsConfig.autoSync) {
+      handleTriggerSync();
+    }
   };
 
   const handleDeleteCustomer = async (id: string) => {
@@ -243,6 +288,10 @@ export default function Home() {
     const queue = await getSyncQueue();
     setSyncQueue(queue);
     showNotice(`Pelanggan ${cust ? cust.name : ''} berhasil dihapus!`, 'warning');
+
+    if (isOnline && sheetsConfig.autoSync) {
+      handleTriggerSync();
+    }
   };
 
   // Service Handlers
