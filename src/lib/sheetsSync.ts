@@ -3,44 +3,103 @@ import { getAllCustomers, getAllOrders, getAllServices, getSheetsConfig, getSync
 export const GOOGLE_APPS_SCRIPT_TEMPLATE = `/**
  * Google Apps Script Backend for Mama Sela Laundry PWA
  * 
- * PETUNJUK SETUP 2 MENIT:
- * 1. Di Google Sheets Anda, pastikan ada 3 tab di bawah:
+ * PETUNJUK SETUP:
+ * 1. Di Google Sheets Anda, pastikan ada 3 tab:
  *    - Orders
  *    - Customers
  *    - Services
- * 2. Buka menu Extensions (Ekstensi) > Apps Script.
- * 3. Hapus semua tulisan di editor, lalu PASTE SELURUH KODE INI.
- * 4. Klik tombol simpan (ikon disket / Cmd+S / Ctrl+S).
- * 5. Klik tombol biru "Deploy" (Terapkan) di pojok kanan atas > "New deployment" (Penerapan baru).
- * 6. Di popup:
- *    - Pilih type: "Web app" (ikon globe).
- *    - Description: "Mama Sela Sync"
- *    - Execute as: "Me" (email Anda).
- *    - Who has access: "Anyone" (Siapa saja, PENTING!).
- * 7. Klik "Deploy", lalu jika diminta izin:
- *    - Klik "Authorize access" > pilih akun Google Anda.
- *    - Klik "Advanced" (Lanjutan) di bawah kiri > Klik "Go to Untitled project (unsafe)".
- *    - Klik "Allow" (Izinkan).
- * 8. Copy "Web app URL" (yang berakhiran /exec) dan paste ke aplikasi Mama Sela!
+ * 2. Paste SELURUH kode ini ke Google Apps Script editor.
+ * 3. Klik tombol Simpan (ikon disket / Ctrl+S).
+ * 4. Untuk MENGETES di editor: Pilih fungsi "testSync" di atas, lalu klik "Jalankan".
+ * 5. Untuk MENERAPKAN: Klik "Terapkan" (Deploy) > "Penerapan baru" (New deployment).
+ *    - Jenis: "Aplikasi web" (Web app).
+ *    - Yang memiliki akses: "Siapa saja" (Anyone) -> WAJIB!
+ * 6. Salin Web app URL (/exec) dan paste ke aplikasi Mama Sela.
  */
+
+// ID Spreadsheet Google Sheets Anda (Otomatis dipakai jika script dibuat terpisah/standalone)
+var SPREADSHEET_ID = "1_6yVfCk8wjZ-obnEuwXCh_IynU_8bYrxSQG_wN-ELxc";
+
+function getSpreadsheet(data) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  if (!ss) {
+    var id = (data && data.spreadsheetId) ? data.spreadsheetId : SPREADSHEET_ID;
+    if (id) {
+      try {
+        ss = SpreadsheetApp.openById(id);
+      } catch (err) {
+        console.error("Gagal openById:", err);
+      }
+    }
+  }
+  return ss;
+}
+
+// Fungsi ini BISA diklik tombol "Jalankan" / "Debug" langsung di editor untuk tes:
+function testSync() {
+  var ss = getSpreadsheet();
+  if (!ss) {
+    Logger.log("ERROR: Spreadsheet tidak ditemukan. Periksa SPREADSHEET_ID.");
+    return;
+  }
+  syncOrders(ss, [
+    {
+      id: 'ORD-TEST-001',
+      customerName: 'Pelanggan Tes',
+      customerPhone: '08123456789',
+      createdAt: new Date().toISOString(),
+      mainService: 'Cuci setrika',
+      speed: 'Normal',
+      actualWeight: 3.0,
+      billedWeight: 3.0,
+      items: [],
+      totalPrice: 18000,
+      paymentStatus: 'Lunas',
+      paymentMethod: 'Cash',
+      progressStatus: 'Selesai',
+      cashierName: 'Mama Sela'
+    }
+  ]);
+  syncCustomers(ss, [
+    {
+      id: 'CUST-001',
+      name: 'Pelanggan Tes',
+      phone: '08123456789',
+      address: 'Jl. Contoh No. 1',
+      createdAt: new Date().toISOString()
+    }
+  ]);
+  syncServices(ss, [
+    {
+      id: 'SRV-01',
+      name: 'Cuci setrika',
+      category: 'Kiloan',
+      unit: 'kg',
+      price: 6000,
+      hpp: 2500,
+      profitMarginPercent: 58
+    }
+  ]);
+  Logger.log("SUKSES: Data tes berhasil ditulis ke Spreadsheet!");
+}
 
 function doPost(e) {
   try {
     if (!e || !e.postData || !e.postData.contents) {
       return ContentService.createTextOutput(JSON.stringify({
         status: 'error',
-        message: 'Tidak ada data payload yang diterima.'
+        message: 'Tidak ada data payload yang diterima. Catatan: Untuk tes di editor, pilih fungsi testSync() lalu klik Jalankan.'
       })).setMimeType(ContentService.MimeType.JSON);
     }
 
     var data = JSON.parse(e.postData.contents);
     var action = data.action;
-    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var ss = getSpreadsheet(data);
 
     if (!ss) {
       return ContentService.createTextOutput(JSON.stringify({
         status: 'error',
-        message: 'Spreadsheet aktif tidak ditemukan. Pastikan script ini dibuat dari menu Ekstensi > Apps Script di dalam file Google Spreadsheet Anda.'
+        message: 'Spreadsheet tidak ditemukan. Pastikan SPREADSHEET_ID sudah benar.'
       })).setMimeType(ContentService.MimeType.JSON);
     }
 
@@ -75,7 +134,7 @@ function doPost(e) {
 
 function doGet(e) {
   try {
-    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var ss = getSpreadsheet();
     if (!ss) {
       return ContentService.createTextOutput(JSON.stringify({
         status: 'error',
@@ -254,6 +313,7 @@ export async function syncToGoogleSheets(): Promise<{ success: boolean; message:
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           scriptUrl,
+          spreadsheetId: '1_6yVfCk8wjZ-obnEuwXCh_IynU_8bYrxSQG_wN-ELxc',
           action: 'sync',
           orders,
           customers,
@@ -285,6 +345,7 @@ export async function syncToGoogleSheets(): Promise<{ success: boolean; message:
         mode: 'no-cors',
         body: JSON.stringify({
           action: 'sync',
+          spreadsheetId: '1_6yVfCk8wjZ-obnEuwXCh_IynU_8bYrxSQG_wN-ELxc',
           orders,
           customers,
           services,

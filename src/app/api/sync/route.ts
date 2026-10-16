@@ -26,6 +26,7 @@ export async function POST(req: Request) {
     // Node.js follow 302 redirects automatically
     const payload = JSON.stringify({
       action: action || 'sync',
+      spreadsheetId: body.spreadsheetId || '1_6yVfCk8wjZ-obnEuwXCh_IynU_8bYrxSQG_wN-ELxc',
       orders: orders || [],
       customers: customers || [],
       services: services || [],
