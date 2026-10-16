@@ -22,8 +22,10 @@ import {
   syncCustomerToSupabase,
   deleteCustomerFromSupabase,
   syncOrderToSupabase,
+  deleteOrderFromSupabase,
   syncServiceToSupabase,
   deleteServiceFromSupabase,
+  syncOfflineQueueToSupabase,
 } from '@/lib/supabaseSync';
 import { INITIAL_USERS } from '@/lib/initialData';
 import { Navbar } from '@/components/Navbar';
@@ -124,15 +126,15 @@ export default function Home() {
         setCurrentUser(loadedUsers[0]);
       }
 
-      // Pull latest data from Supabase Cloud
+      // Flush offline queue and pull latest data from Supabase Cloud
       if (typeof window !== 'undefined' && navigator.onLine) {
         try {
-          const supaData = await pullFromSupabase();
-          if (supaData.customers.length > 0) setCustomers(supaData.customers);
-          if (supaData.orders.length > 0) setOrders(supaData.orders);
-          if (supaData.services.length > 0) setServices(supaData.services);
+          const res = await syncOfflineQueueToSupabase();
+          if (res.customers.length > 0) setCustomers(res.customers);
+          if (res.orders.length > 0) setOrders(res.orders);
+          if (res.services.length > 0) setServices(res.services);
         } catch (supaErr) {
-          console.warn('Initial Supabase pull error:', supaErr);
+          console.warn('Initial Supabase sync error:', supaErr);
         }
       }
     }
@@ -161,17 +163,25 @@ export default function Home() {
     window.addEventListener('beforeinstallprompt', handleBeforeInstall);
     window.addEventListener('appinstalled', handleAppInstalled);
 
-    // Online / Offline Listeners
+    // Online / Offline Listeners (Auto-sync when reconnected)
     setIsOnline(navigator.onLine);
     const handleOnline = async () => {
       setIsOnline(true);
-      showNotice('Koneksi internet kembali online!', 'success');
+      showNotice('Koneksi internet online! Menyinkronkan data offline...', 'success');
       try {
-        const supaData = await pullFromSupabase();
-        if (supaData.customers.length > 0) setCustomers(supaData.customers);
-        if (supaData.orders.length > 0) setOrders(supaData.orders);
-        if (supaData.services.length > 0) setServices(supaData.services);
-      } catch (e) {}
+        const res = await syncOfflineQueueToSupabase();
+        if (res.customers.length > 0) setCustomers(res.customers);
+        if (res.orders.length > 0) setOrders(res.orders);
+        if (res.services.length > 0) setServices(res.services);
+
+        if (res.syncedCount > 0) {
+          showNotice(`${res.syncedCount} transaksi offline berhasil disinkronkan ke cloud!`, 'success');
+        } else {
+          showNotice('Aplikasi online dan data tersinkronisasi.', 'success');
+        }
+      } catch (e) {
+        console.error('Online auto-sync error:', e);
+      }
     };
     const handleOffline = () => {
       setIsOnline(false);
@@ -181,14 +191,14 @@ export default function Home() {
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
 
-    // Refresh data when user focuses / returns to the app tab
+    // Refresh & sync offline data when user focuses / returns to the app tab
     const handleFocusSync = async () => {
       if (typeof window !== 'undefined' && navigator.onLine && document.visibilityState === 'visible') {
         try {
-          const supaData = await pullFromSupabase();
-          if (supaData.customers.length > 0) setCustomers(supaData.customers);
-          if (supaData.orders.length > 0) setOrders(supaData.orders);
-          if (supaData.services.length > 0) setServices(supaData.services);
+          const res = await syncOfflineQueueToSupabase();
+          if (res.customers.length > 0) setCustomers(res.customers);
+          if (res.orders.length > 0) setOrders(res.orders);
+          if (res.services.length > 0) setServices(res.services);
         } catch (e) {}
       }
     };
@@ -255,11 +265,16 @@ export default function Home() {
   const handleRefreshSupabase = async () => {
     setIsSyncing(true);
     try {
-      const supaData = await pullFromSupabase();
-      if (supaData.customers.length > 0) setCustomers(supaData.customers);
-      if (supaData.orders.length > 0) setOrders(supaData.orders);
-      if (supaData.services.length > 0) setServices(supaData.services);
-      showNotice('Data berhasil disinkronkan dari Supabase!', 'success');
+      const res = await syncOfflineQueueToSupabase();
+      if (res.customers.length > 0) setCustomers(res.customers);
+      if (res.orders.length > 0) setOrders(res.orders);
+      if (res.services.length > 0) setServices(res.services);
+      showNotice(
+        res.syncedCount > 0
+          ? `${res.syncedCount} perubahan offline berhasil disinkronkan ke cloud!`
+          : 'Data berhasil disinkronkan dari Supabase!',
+        'success'
+      );
     } catch (e) {
       showNotice('Gagal memuat data dari Supabase', 'error');
     } finally {
@@ -273,9 +288,12 @@ export default function Home() {
     const updated = await getAllOrders();
     setOrders(updated);
 
-    // Instant Realtime sync to Supabase
-    syncOrderToSupabase(order);
-    showNotice(`Order #${order.id} berhasil dibuat!`, 'success');
+    if (isOnline) {
+      syncOrderToSupabase(order);
+      showNotice(`Order #${order.id} berhasil dibuat!`, 'success');
+    } else {
+      showNotice(`Order #${order.id} tersimpan di memori perangkat (Offline). Akan otomatis disinkronkan saat online.`, 'warning');
+    }
 
     setActiveReceiptOrder(order);
   };
@@ -289,7 +307,9 @@ export default function Home() {
       completedAt: nextStatus === 'Selesai' ? new Date().toISOString() : order.completedAt,
     };
     await saveOrder(updatedOrder);
-    syncOrderToSupabase(updatedOrder);
+    if (isOnline) {
+      syncOrderToSupabase(updatedOrder);
+    }
     const updated = await getAllOrders();
     setOrders(updated);
     showNotice(`Status pesanan diperbarui: ${nextStatus}`, 'success');
@@ -304,7 +324,9 @@ export default function Home() {
       paymentDate: paymentStatus === 'Lunas' ? new Date().toISOString() : undefined,
     };
     await saveOrder(updatedOrder);
-    syncOrderToSupabase(updatedOrder);
+    if (isOnline) {
+      syncOrderToSupabase(updatedOrder);
+    }
     const updated = await getAllOrders();
     setOrders(updated);
     showNotice(`Pembayaran diperbarui: ${paymentStatus}`, 'success');
@@ -313,16 +335,22 @@ export default function Home() {
   // Customer Handlers
   const handleSaveCustomer = async (cust: Customer) => {
     await saveCustomer(cust);
-    syncCustomerToSupabase(cust);
+    if (isOnline) {
+      syncCustomerToSupabase(cust);
+      showNotice(`Pelanggan ${cust.name} tersimpan!`, 'success');
+    } else {
+      showNotice(`Pelanggan ${cust.name} tersimpan di memori perangkat (Offline).`, 'warning');
+    }
     const updated = await getAllCustomers();
     setCustomers(updated);
-    showNotice(`Pelanggan ${cust.name} tersimpan!`, 'success');
   };
 
   const handleDeleteCustomer = async (id: string) => {
     const cust = customers.find((c) => c.id === id);
     await deleteCustomer(id);
-    deleteCustomerFromSupabase(id);
+    if (isOnline) {
+      deleteCustomerFromSupabase(id);
+    }
     const updated = await getAllCustomers();
     setCustomers(updated);
     showNotice(`Pelanggan ${cust ? cust.name : ''} berhasil dihapus!`, 'warning');
@@ -331,7 +359,9 @@ export default function Home() {
   // Service Handlers
   const handleSaveService = async (service: ServiceItem) => {
     await saveService(service);
-    syncServiceToSupabase(service);
+    if (isOnline) {
+      syncServiceToSupabase(service);
+    }
     const updated = await getAllServices();
     setServices(updated);
     showNotice(`Layanan ${service.name} tersimpan!`, 'success');
@@ -339,7 +369,9 @@ export default function Home() {
 
   const handleDeleteService = async (id: string) => {
     await deleteService(id);
-    deleteServiceFromSupabase(id);
+    if (isOnline) {
+      deleteServiceFromSupabase(id);
+    }
     const updated = await getAllServices();
     setServices(updated);
     showNotice('Layanan berhasil dihapus', 'warning');

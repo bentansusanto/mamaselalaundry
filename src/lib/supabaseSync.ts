@@ -10,6 +10,8 @@ import {
   getAllCustomers,
   getAllOrders,
   getAllServices,
+  getSyncQueue,
+  clearSyncQueue,
   getDB,
 } from './db';
 
@@ -207,7 +209,8 @@ export function subscribeToSupabaseRealtime(onDataChanged: () => void) {
 /**
  * Upsert Customer to Supabase
  */
-export async function syncCustomerToSupabase(customer: Customer) {
+export async function syncCustomerToSupabase(customer: Customer): Promise<boolean> {
+  if (typeof window !== 'undefined' && !navigator.onLine) return false;
   try {
     const { error } = await supabase.from('customers').upsert({
       id: customer.id,
@@ -216,28 +219,47 @@ export async function syncCustomerToSupabase(customer: Customer) {
       address: customer.address,
       created_at: customer.createdAt,
     });
-    if (error) console.error('Supabase customer upsert error:', error);
+    if (error) {
+      console.error('Supabase customer upsert error:', error);
+      return false;
+    }
+    // Clear from local offline queue on success
+    const queue = await getSyncQueue();
+    const ids = queue.filter((q) => q.entity === 'customers' && q.data?.id === customer.id).map((q) => q.id);
+    if (ids.length > 0) await clearSyncQueue(ids);
+    return true;
   } catch (e) {
     console.error('Supabase customer error:', e);
+    return false;
   }
 }
 
 /**
  * Delete Customer from Supabase
  */
-export async function deleteCustomerFromSupabase(id: string) {
+export async function deleteCustomerFromSupabase(id: string): Promise<boolean> {
+  if (typeof window !== 'undefined' && !navigator.onLine) return false;
   try {
     const { error } = await supabase.from('customers').delete().eq('id', id);
-    if (error) console.error('Supabase customer delete error:', error);
+    if (error) {
+      console.error('Supabase customer delete error:', error);
+      return false;
+    }
+    const queue = await getSyncQueue();
+    const qIds = queue.filter((q) => q.entity === 'customers' && q.data?.id === id).map((q) => q.id);
+    if (qIds.length > 0) await clearSyncQueue(qIds);
+    return true;
   } catch (e) {
     console.error('Supabase customer delete error:', e);
+    return false;
   }
 }
 
 /**
  * Upsert Order to Supabase
  */
-export async function syncOrderToSupabase(order: Order) {
+export async function syncOrderToSupabase(order: Order): Promise<boolean> {
+  if (typeof window !== 'undefined' && !navigator.onLine) return false;
   try {
     const { error } = await supabase.from('orders').upsert({
       id: order.id,
@@ -263,28 +285,46 @@ export async function syncOrderToSupabase(order: Order) {
       notes: order.notes || '',
       cashier_name: order.cashierName,
     });
-    if (error) console.error('Supabase order upsert error:', error);
+    if (error) {
+      console.error('Supabase order upsert error:', error);
+      return false;
+    }
+    const queue = await getSyncQueue();
+    const ids = queue.filter((q) => q.entity === 'orders' && q.data?.id === order.id).map((q) => q.id);
+    if (ids.length > 0) await clearSyncQueue(ids);
+    return true;
   } catch (e) {
     console.error('Supabase order error:', e);
+    return false;
   }
 }
 
 /**
  * Delete Order from Supabase
  */
-export async function deleteOrderFromSupabase(id: string) {
+export async function deleteOrderFromSupabase(id: string): Promise<boolean> {
+  if (typeof window !== 'undefined' && !navigator.onLine) return false;
   try {
     const { error } = await supabase.from('orders').delete().eq('id', id);
-    if (error) console.error('Supabase order delete error:', error);
+    if (error) {
+      console.error('Supabase order delete error:', error);
+      return false;
+    }
+    const queue = await getSyncQueue();
+    const qIds = queue.filter((q) => q.entity === 'orders' && q.data?.id === id).map((q) => q.id);
+    if (qIds.length > 0) await clearSyncQueue(qIds);
+    return true;
   } catch (e) {
     console.error('Supabase order delete error:', e);
+    return false;
   }
 }
 
 /**
  * Upsert Service to Supabase
  */
-export async function syncServiceToSupabase(service: ServiceItem) {
+export async function syncServiceToSupabase(service: ServiceItem): Promise<boolean> {
+  if (typeof window !== 'undefined' && !navigator.onLine) return false;
   try {
     const { error } = await supabase.from('services').upsert({
       id: service.id,
@@ -296,20 +336,105 @@ export async function syncServiceToSupabase(service: ServiceItem) {
       hpp: service.hpp,
       profit_margin_percent: service.profitMarginPercent,
     });
-    if (error) console.error('Supabase service upsert error:', error);
+    if (error) {
+      console.error('Supabase service upsert error:', error);
+      return false;
+    }
+    const queue = await getSyncQueue();
+    const ids = queue.filter((q) => q.entity === 'services' && q.data?.id === service.id).map((q) => q.id);
+    if (ids.length > 0) await clearSyncQueue(ids);
+    return true;
   } catch (e) {
     console.error('Supabase service error:', e);
+    return false;
   }
 }
 
 /**
  * Delete Service from Supabase
  */
-export async function deleteServiceFromSupabase(id: string) {
+export async function deleteServiceFromSupabase(id: string): Promise<boolean> {
+  if (typeof window !== 'undefined' && !navigator.onLine) return false;
   try {
     const { error } = await supabase.from('services').delete().eq('id', id);
-    if (error) console.error('Supabase service delete error:', error);
+    if (error) {
+      console.error('Supabase service delete error:', error);
+      return false;
+    }
+    const queue = await getSyncQueue();
+    const qIds = queue.filter((q) => q.entity === 'services' && q.data?.id === id).map((q) => q.id);
+    if (qIds.length > 0) await clearSyncQueue(qIds);
+    return true;
   } catch (e) {
     console.error('Supabase service delete error:', e);
+    return false;
   }
 }
+
+/**
+ * Flush all offline queue changes to Supabase when reconnected, then pull latest data
+ */
+export async function syncOfflineQueueToSupabase(): Promise<{
+  success: boolean;
+  syncedCount: number;
+  customers: Customer[];
+  orders: Order[];
+  services: ServiceItem[];
+}> {
+  if (typeof window === 'undefined' || !navigator.onLine) {
+    return { success: false, syncedCount: 0, customers: [], orders: [], services: [] };
+  }
+
+  try {
+    const queue = await getSyncQueue();
+    const processedIds: string[] = [];
+
+    for (const item of queue) {
+      try {
+        if (item.entity === 'orders') {
+          if (item.action === 'delete') {
+            await deleteOrderFromSupabase(item.data.id);
+          } else {
+            await syncOrderToSupabase(item.data);
+          }
+          processedIds.push(item.id);
+        } else if (item.entity === 'customers') {
+          if (item.action === 'delete') {
+            await deleteCustomerFromSupabase(item.data.id);
+          } else {
+            await syncCustomerToSupabase(item.data);
+          }
+          processedIds.push(item.id);
+        } else if (item.entity === 'services') {
+          if (item.action === 'delete') {
+            await deleteServiceFromSupabase(item.data.id);
+          } else {
+            await syncServiceToSupabase(item.data);
+          }
+          processedIds.push(item.id);
+        }
+      } catch (itemErr) {
+        console.error('Failed to process offline queue item:', item, itemErr);
+      }
+    }
+
+    if (processedIds.length > 0) {
+      await clearSyncQueue(processedIds);
+    }
+
+    // Pull merged fresh data from Supabase
+    const freshData = await pullFromSupabase();
+
+    return {
+      success: true,
+      syncedCount: processedIds.length,
+      customers: freshData.customers,
+      orders: freshData.orders,
+      services: freshData.services,
+    };
+  } catch (err) {
+    console.error('Error syncing offline queue to Supabase:', err);
+    return { success: false, syncedCount: 0, customers: [], orders: [], services: [] };
+  }
+}
+
