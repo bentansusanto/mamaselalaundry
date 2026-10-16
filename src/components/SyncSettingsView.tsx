@@ -60,7 +60,16 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
           </div>
 
           <button
-            onClick={onTriggerSync}
+            onClick={() => {
+              if (scriptUrl.trim() !== (config.scriptUrl || '')) {
+                onSaveConfig({
+                  scriptUrl: scriptUrl.trim(),
+                  autoSync,
+                  lastSyncedAt: config.lastSyncedAt,
+                });
+              }
+              onTriggerSync();
+            }}
             disabled={isSyncing}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl transition active:scale-95 shadow-sm shadow-blue-500/20"
           >
@@ -95,7 +104,7 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
             className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs font-mono"
           />
           <p className="text-[10px] text-slate-400">
-            Dapatkan URL ini setelah mempublikasikan Apps Script di Google Sheets Anda.
+            Pastikan URL berakhiran <b>/exec</b> (didapat setelah Deploy &gt; New deployment).
           </p>
 
           <div className="flex items-center justify-between pt-1">
@@ -130,8 +139,8 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
       <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm space-y-3">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="font-bold text-xs text-slate-900">Script Google Apps Script</h3>
-            <p className="text-[10px] text-slate-400">Kode backend untuk Google Sheets</p>
+            <h3 className="font-bold text-xs text-slate-900">Script Google Apps Script Terbaru</h3>
+            <p className="text-[10px] text-slate-400">Kode backend otomatis buat header & data</p>
           </div>
           <button
             onClick={handleCopyScript}
@@ -144,16 +153,15 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
           </button>
         </div>
 
-        <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2 text-xs">
-          <p className="font-bold text-slate-800">Langkah Cepat Setup:</p>
-          <ol className="list-decimal pl-4 space-y-1 text-[11px] text-slate-600">
-            <li>Buka Google Sheets baru di Google Drive.</li>
-            <li>Buat 3 lembar tab: <b>Orders</b>, <b>Customers</b>, <b>Services</b>.</li>
-            <li>Buka menu <b>Extensions &gt; Apps Script</b>.</li>
-            <li>Klik tombol <b>Salin Kode</b> di atas, lalu paste ke editor.</li>
-            <li>Klik <b>Deploy &gt; New deployment &gt; Web app</b>.</li>
-            <li>Set "Who has access" ke <b>Anyone</b>, lalu deploy.</li>
-            <li>Salin URL Web App dan tempelkan pada kolom URL di atas.</li>
+        <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl space-y-2 text-xs">
+          <p className="font-bold text-amber-900">⚠️ PENTING SAAT DEPLOY:</p>
+          <ol className="list-decimal pl-4 space-y-1.5 text-[11px] text-amber-800">
+            <li>Buka Google Sheets Anda &gt; menu <b>Ekstensi &gt; Apps Script</b>.</li>
+            <li>Hapus semua kode lama, lalu <b>Paste kode yang disalin di atas</b>, dan klik Simpan.</li>
+            <li>Klik tombol biru <b>Deploy (Terapkan) &gt; New deployment (Penerapan baru)</b>.</li>
+            <li>Di opsi <b>"Who has access" (Akses)</b>: WAJIB pilih <b>"Anyone" (Siapa saja)</b>. <i>(Jangan 'Only myself')</i>.</li>
+            <li>Klik <b>Deploy</b> &gt; Klik <b>Authorize access</b> &gt; Akun Google &gt; <b>Advanced (Lanjutan)</b> &gt; <b>Go to project (unsafe)</b> &gt; <b>Allow (Izinkan)</b>.</li>
+            <li>Salin <b>Web app URL</b> dan tempelkan di kotak URL di atas, lalu klik <b>Sync Sekarang</b>.</li>
           </ol>
         </div>
       </div>
