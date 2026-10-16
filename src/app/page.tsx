@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Customer, Order, OrderProgressStatus, PaymentStatus, ServiceItem, SheetsConfig, SyncQueueItem, UserAccount } from '@/types';
+import { Customer, Order, OrderProgressStatus, PaymentStatus, ServiceItem, UserAccount } from '@/types';
 import {
   initDatabaseDefaults,
   getAllOrders,
@@ -14,11 +14,8 @@ import {
   deleteService,
   getAllUsers,
   saveUser,
-  getSheetsConfig,
-  saveSheetsConfig,
   getSyncQueue,
 } from '@/lib/db';
-import { syncToGoogleSheets } from '@/lib/sheetsSync';
 import {
   pullFromSupabase,
   subscribeToSupabaseRealtime,
@@ -98,8 +95,6 @@ export default function Home() {
   const [services, setServices] = useState<ServiceItem[]>([]);
   const [users, setUsers] = useState<UserAccount[]>(INITIAL_USERS);
   const [currentUser, setCurrentUser] = useState<UserAccount>(INITIAL_USERS[0]);
-  const [sheetsConfig, setSheetsConfig] = useState<SheetsConfig>({ scriptUrl: '', autoSync: true });
-  const [syncQueue, setSyncQueue] = useState<SyncQueueItem[]>([]);
 
   // Connectivity & Sync States
   const [isOnline, setIsOnline] = useState<boolean>(true);
@@ -115,38 +110,11 @@ export default function Home() {
   useEffect(() => {
     async function loadData() {
       await initDatabaseDefaults();
-      let loadedConfig = await getSheetsConfig();
-
-      // Check if URL has ?sync_url=... (for 1-click cross-device sharing between Laptop & HP)
-      if (typeof window !== 'undefined') {
-        try {
-          const urlParams = new URLSearchParams(window.location.search);
-          const syncUrlParam = urlParams.get('sync_url');
-          if (syncUrlParam && syncUrlParam.trim()) {
-            loadedConfig = { ...loadedConfig, scriptUrl: syncUrlParam.trim() };
-            await saveSheetsConfig(loadedConfig);
-            window.history.replaceState({}, document.title, window.location.pathname);
-          }
-        } catch (e) {}
-      }
-
-      // If local device doesn't have scriptUrl yet, fetch shared scriptUrl from server
-      if (!loadedConfig.scriptUrl) {
-        try {
-          const res = await fetch('/api/sync');
-          const data = await res.json();
-          if (data?.scriptUrl) {
-            loadedConfig = { ...loadedConfig, scriptUrl: data.scriptUrl };
-            await saveSheetsConfig(loadedConfig);
-          }
-        } catch (e) {}
-      }
 
       const loadedOrders = await getAllOrders();
       const loadedCustomers = await getAllCustomers();
       const loadedServices = await getAllServices();
       const loadedUsers = await getAllUsers();
-      const loadedQueue = await getSyncQueue();
 
       setOrders(loadedOrders);
       setCustomers(loadedCustomers);
@@ -155,10 +123,8 @@ export default function Home() {
       if (loadedUsers.length > 0) {
         setCurrentUser(loadedUsers[0]);
       }
-      setSheetsConfig(loadedConfig);
-      setSyncQueue(loadedQueue);
 
-      // Pull newest data from Supabase
+      // Pull latest data from Supabase Cloud
       if (typeof window !== 'undefined' && navigator.onLine) {
         try {
           const supaData = await pullFromSupabase();
@@ -167,23 +133,6 @@ export default function Home() {
           if (supaData.services.length > 0) setServices(supaData.services);
         } catch (supaErr) {
           console.warn('Initial Supabase pull error:', supaErr);
-        }
-      }
-
-      // Background two-way sync on launch to pull newest data from Google Sheets
-      if (loadedConfig.scriptUrl && loadedConfig.autoSync) {
-        try {
-          const res = await syncToGoogleSheets();
-          if (res.success) {
-            const freshOrders = await getAllOrders();
-            const freshCustomers = await getAllCustomers();
-            const freshServices = await getAllServices();
-            setOrders(freshOrders);
-            setCustomers(freshCustomers);
-            setServices(freshServices);
-          }
-        } catch (syncErr) {
-          console.warn('Initial background sync error:', syncErr);
         }
       }
     }
@@ -214,47 +163,38 @@ export default function Home() {
 
     // Online / Offline Listeners
     setIsOnline(navigator.onLine);
-    const handleOnline = () => {
+    const handleOnline = async () => {
       setIsOnline(true);
       showNotice('Koneksi internet kembali online!', 'success');
+      try {
+        const supaData = await pullFromSupabase();
+        if (supaData.customers.length > 0) setCustomers(supaData.customers);
+        if (supaData.orders.length > 0) setOrders(supaData.orders);
+        if (supaData.services.length > 0) setServices(supaData.services);
+      } catch (e) {}
     };
     const handleOffline = () => {
       setIsOnline(false);
-      showNotice('Mode Offline aktif. Data tersimpan di IndexedDB.', 'warning');
+      showNotice('Mode Offline aktif. Data tersimpan di memori perangkat.', 'warning');
     };
 
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
 
-    // Periodic background sync & on window focus / tab visibility change (real-time cross-device sync every 3 seconds)
-    let isPerformingSync = false;
-    const performBackgroundSync = async () => {
-      if (isPerformingSync) return;
+    // Refresh data when user focuses / returns to the app tab
+    const handleFocusSync = async () => {
       if (typeof window !== 'undefined' && navigator.onLine && document.visibilityState === 'visible') {
-        const cfg = await getSheetsConfig();
-        if (cfg.scriptUrl && cfg.autoSync) {
-          try {
-            isPerformingSync = true;
-            const res = await syncToGoogleSheets();
-            if (res.success) {
-              const freshOrders = await getAllOrders();
-              const freshCustomers = await getAllCustomers();
-              const freshServices = await getAllServices();
-              setOrders(freshOrders);
-              setCustomers(freshCustomers);
-              setServices(freshServices);
-            }
-          } catch (e) {
-          } finally {
-            isPerformingSync = false;
-          }
-        }
+        try {
+          const supaData = await pullFromSupabase();
+          if (supaData.customers.length > 0) setCustomers(supaData.customers);
+          if (supaData.orders.length > 0) setOrders(supaData.orders);
+          if (supaData.services.length > 0) setServices(supaData.services);
+        } catch (e) {}
       }
     };
 
-    window.addEventListener('focus', performBackgroundSync);
-    document.addEventListener('visibilitychange', performBackgroundSync);
-    const syncInterval = setInterval(performBackgroundSync, 3000);
+    window.addEventListener('focus', handleFocusSync);
+    document.addEventListener('visibilitychange', handleFocusSync);
 
     // Supabase Instant Realtime Subscription (< 100ms)
     const unsubscribeSupabase = subscribeToSupabaseRealtime(async () => {
@@ -271,9 +211,8 @@ export default function Home() {
       window.removeEventListener('appinstalled', handleAppInstalled);
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
-      window.removeEventListener('focus', performBackgroundSync);
-      document.removeEventListener('visibilitychange', performBackgroundSync);
-      clearInterval(syncInterval);
+      window.removeEventListener('focus', handleFocusSync);
+      document.removeEventListener('visibilitychange', handleFocusSync);
       unsubscribeSupabase();
     };
   }, []);
@@ -312,25 +251,19 @@ export default function Home() {
     }
   };
 
-  // Sync handler
-  const handleTriggerSync = async () => {
+  // Supabase Manual Refresh Handler
+  const handleRefreshSupabase = async () => {
     setIsSyncing(true);
-    const result = await syncToGoogleSheets();
-    setIsSyncing(false);
-
-    if (result.success) {
-      showNotice(result.message, 'success');
-      const updatedConfig = await getSheetsConfig();
-      const updatedOrders = await getAllOrders();
-      const updatedCustomers = await getAllCustomers();
-      const updatedServices = await getAllServices();
-      setSheetsConfig(updatedConfig);
-      setOrders(updatedOrders);
-      setCustomers(updatedCustomers);
-      setServices(updatedServices);
-      setSyncQueue([]);
-    } else {
-      showNotice(result.message, 'warning');
+    try {
+      const supaData = await pullFromSupabase();
+      if (supaData.customers.length > 0) setCustomers(supaData.customers);
+      if (supaData.orders.length > 0) setOrders(supaData.orders);
+      if (supaData.services.length > 0) setServices(supaData.services);
+      showNotice('Data berhasil disinkronkan dari Supabase!', 'success');
+    } catch (e) {
+      showNotice('Gagal memuat data dari Supabase', 'error');
+    } finally {
+      setIsSyncing(false);
     }
   };
 
@@ -339,18 +272,10 @@ export default function Home() {
     await saveOrder(order);
     const updated = await getAllOrders();
     setOrders(updated);
-    const queue = await getSyncQueue();
-    setSyncQueue(queue);
 
     // Instant Realtime sync to Supabase
     syncOrderToSupabase(order);
-
-    // Auto sync if online and enabled
-    if (isOnline && sheetsConfig.autoSync) {
-      handleTriggerSync();
-    } else {
-      showNotice(`Order #${order.id} berhasil dibuat!`, 'success');
-    }
+    showNotice(`Order #${order.id} berhasil dibuat!`, 'success');
 
     setActiveReceiptOrder(order);
   };
@@ -367,13 +292,7 @@ export default function Home() {
     syncOrderToSupabase(updatedOrder);
     const updated = await getAllOrders();
     setOrders(updated);
-    const queue = await getSyncQueue();
-    setSyncQueue(queue);
     showNotice(`Status pesanan diperbarui: ${nextStatus}`, 'success');
-
-    if (isOnline && sheetsConfig.autoSync) {
-      handleTriggerSync();
-    }
   };
 
   const handleUpdatePaymentStatus = async (orderId: string, paymentStatus: PaymentStatus) => {
@@ -388,84 +307,42 @@ export default function Home() {
     syncOrderToSupabase(updatedOrder);
     const updated = await getAllOrders();
     setOrders(updated);
-    const queue = await getSyncQueue();
-    setSyncQueue(queue);
     showNotice(`Pembayaran diperbarui: ${paymentStatus}`, 'success');
-
-    if (isOnline && sheetsConfig.autoSync) {
-      handleTriggerSync();
-    }
   };
 
   // Customer Handlers
   const handleSaveCustomer = async (cust: Customer) => {
     await saveCustomer(cust);
+    syncCustomerToSupabase(cust);
     const updated = await getAllCustomers();
     setCustomers(updated);
-    const queue = await getSyncQueue();
-    setSyncQueue(queue);
-
-    // Instant Realtime sync to Supabase
-    syncCustomerToSupabase(cust);
-
-    if (isOnline && sheetsConfig.autoSync) {
-      handleTriggerSync();
-    } else {
-      showNotice(`Pelanggan ${cust.name} tersimpan!`, 'success');
-    }
+    showNotice(`Pelanggan ${cust.name} tersimpan!`, 'success');
   };
 
   const handleDeleteCustomer = async (id: string) => {
     const cust = customers.find((c) => c.id === id);
     await deleteCustomer(id);
+    deleteCustomerFromSupabase(id);
     const updated = await getAllCustomers();
     setCustomers(updated);
-    const queue = await getSyncQueue();
-    setSyncQueue(queue);
-
-    // Instant Realtime sync to Supabase
-    deleteCustomerFromSupabase(id);
-
     showNotice(`Pelanggan ${cust ? cust.name : ''} berhasil dihapus!`, 'warning');
-
-    if (isOnline && sheetsConfig.autoSync) {
-      handleTriggerSync();
-    }
   };
 
   // Service Handlers
   const handleSaveService = async (service: ServiceItem) => {
     await saveService(service);
+    syncServiceToSupabase(service);
     const updated = await getAllServices();
     setServices(updated);
-    const queue = await getSyncQueue();
-    setSyncQueue(queue);
-
-    // Instant Realtime sync to Supabase
-    syncServiceToSupabase(service);
-
     showNotice(`Layanan ${service.name} tersimpan!`, 'success');
-
-    if (isOnline && sheetsConfig.autoSync) {
-      handleTriggerSync();
-    }
   };
 
   const handleDeleteService = async (id: string) => {
     await deleteService(id);
+    deleteServiceFromSupabase(id);
     const updated = await getAllServices();
     setServices(updated);
-    const queue = await getSyncQueue();
-    setSyncQueue(queue);
-
-    // Instant Realtime sync to Supabase
-    deleteServiceFromSupabase(id);
-
     showNotice('Layanan berhasil dihapus', 'warning');
-
-    if (isOnline && sheetsConfig.autoSync) {
-      handleTriggerSync();
-    }
   };
 
   // User Handlers
@@ -477,13 +354,6 @@ export default function Home() {
       setCurrentUser(u);
     }
     showNotice(`Akun ${u.name} diperbarui!`, 'success');
-  };
-
-  // Config Handlers
-  const handleSaveConfig = async (cfg: SheetsConfig) => {
-    await saveSheetsConfig(cfg);
-    setSheetsConfig(cfg);
-    showNotice('Pengaturan sinkronisasi tersimpan!', 'success');
   };
 
   const handleResetDemoData = async () => {
@@ -502,7 +372,7 @@ export default function Home() {
         onSelectUser={setCurrentUser}
         isOnline={isOnline}
         isSyncing={isSyncing}
-        onSync={handleTriggerSync}
+        onSync={handleRefreshSupabase}
         onOpenInstall={handleDownloadApp}
       />
 
@@ -580,7 +450,7 @@ export default function Home() {
             onSaveCustomer={handleSaveCustomer}
             onDeleteCustomer={handleDeleteCustomer}
             onViewReceipt={setActiveReceiptOrder}
-            onSync={handleTriggerSync}
+            onSync={handleRefreshSupabase}
             isSyncing={isSyncing}
           />
         )}
@@ -603,7 +473,7 @@ export default function Home() {
             {moreSubView === 'menu' && (
               <MoreMenuView
                 onSelectSubView={setMoreSubView}
-                syncQueueCount={syncQueue.length}
+                syncQueueCount={0}
                 onOpenInstall={() => setIsInstallModalOpen(true)}
               />
             )}
@@ -624,11 +494,11 @@ export default function Home() {
             )}
             {moreSubView === 'sync' && (
               <SyncSettingsView
-                config={sheetsConfig}
-                syncQueue={syncQueue}
                 isSyncing={isSyncing}
-                onSaveConfig={handleSaveConfig}
-                onTriggerSync={handleTriggerSync}
+                onRefreshData={handleRefreshSupabase}
+                ordersCount={orders.length}
+                customersCount={customers.length}
+                servicesCount={services.length}
                 onResetData={handleResetDemoData}
               />
             )}
@@ -643,18 +513,6 @@ export default function Home() {
         onSelectTab={(tab) => {
           setCurrentTab(tab);
           if (tab === 'more') setMoreSubView('menu');
-          if (isOnline && sheetsConfig.scriptUrl && (tab === 'customers' || tab === 'orders' || tab === 'dashboard')) {
-            syncToGoogleSheets().then(async (res) => {
-              if (res.success) {
-                const freshOrders = await getAllOrders();
-                const freshCustomers = await getAllCustomers();
-                const freshServices = await getAllServices();
-                setOrders(freshOrders);
-                setCustomers(freshCustomers);
-                setServices(freshServices);
-              }
-            }).catch(() => {});
-          }
         }}
         activeOrdersCount={activeOrdersCount}
       />

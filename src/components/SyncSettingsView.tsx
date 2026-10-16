@@ -1,238 +1,133 @@
 'use client';
 
 import React, { useState } from 'react';
-import { SheetsConfig, SyncQueueItem } from '@/types';
-import { GOOGLE_APPS_SCRIPT_TEMPLATE } from '@/lib/sheetsSync';
-import { formatDateTime } from '@/lib/utils';
-import { Cloud, Check, Copy, RefreshCw, Database, Download, Upload, ExternalLink, Smartphone, Share2 } from 'lucide-react';
+import { Cloud, Check, RefreshCw, Database, ShieldCheck, Zap, Download } from 'lucide-react';
 
 interface SyncSettingsViewProps {
-  config: SheetsConfig;
-  syncQueue: SyncQueueItem[];
   isSyncing: boolean;
-  onSaveConfig: (cfg: SheetsConfig) => void;
-  onTriggerSync: () => void;
+  onRefreshData: () => Promise<void>;
+  ordersCount: number;
+  customersCount: number;
+  servicesCount: number;
   onResetData: () => void;
 }
 
 export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
-  config,
-  syncQueue,
   isSyncing,
-  onSaveConfig,
-  onTriggerSync,
+  onRefreshData,
+  ordersCount,
+  customersCount,
+  servicesCount,
   onResetData,
 }) => {
-  const [scriptUrl, setScriptUrl] = useState(config.scriptUrl || '');
-  const [autoSync, setAutoSync] = useState(config.autoSync ?? true);
-  const [copied, setCopied] = useState(false);
-  const [copiedShareLink, setCopiedShareLink] = useState(false);
-  const [savedSuccess, setSavedSuccess] = useState(false);
+  const [refreshedSuccess, setRefreshedSuccess] = useState(false);
 
-  const handleSave = () => {
-    onSaveConfig({
-      scriptUrl: scriptUrl.trim(),
-      autoSync,
-      lastSyncedAt: config.lastSyncedAt,
-    });
-    setSavedSuccess(true);
-    setTimeout(() => setSavedSuccess(false), 2500);
-  };
-
-  const handleCopyShareLink = () => {
-    if (!scriptUrl.trim()) {
-      alert('Isi dan simpan Google Apps Script URL terlebih dahulu!');
-      return;
-    }
-    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://mamaselalaundry.vercel.app';
-    const link = `${origin}/?sync_url=${encodeURIComponent(scriptUrl.trim())}`;
-    navigator.clipboard.writeText(link);
-    setCopiedShareLink(true);
-    setTimeout(() => setCopiedShareLink(false), 3000);
-  };
-
-  const handleCopyScript = () => {
-    navigator.clipboard.writeText(GOOGLE_APPS_SCRIPT_TEMPLATE);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 3000);
+  const handleManualRefresh = async () => {
+    await onRefreshData();
+    setRefreshedSuccess(true);
+    setTimeout(() => setRefreshedSuccess(false), 2500);
   };
 
   return (
     <div className="space-y-4">
-      {/* Cloud Sync Status Card */}
+      {/* Supabase Cloud Status Card */}
       <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm space-y-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
-              <Cloud className="w-4 h-4" />
+            <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+              <Zap className="w-5 h-5 fill-emerald-500 text-emerald-500" />
             </div>
             <div>
-              <h3 className="font-bold text-xs text-slate-900">Google Sheets Sync</h3>
-              <p className="text-[10px] text-slate-400">Database Backend Sinkronisasi</p>
+              <div className="flex items-center gap-1.5">
+                <h3 className="font-bold text-xs text-slate-900">Supabase Cloud Database</h3>
+                <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-emerald-100 text-emerald-700">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                  Realtime Aktif
+                </span>
+              </div>
+              <p className="text-[10px] text-slate-400">PostgreSQL Cloud + WebSocket Realtime (&lt; 100ms)</p>
             </div>
           </div>
 
           <button
-            onClick={() => {
-              if (scriptUrl.trim() !== (config.scriptUrl || '')) {
-                onSaveConfig({
-                  scriptUrl: scriptUrl.trim(),
-                  autoSync,
-                  lastSyncedAt: config.lastSyncedAt,
-                });
-              }
-              onTriggerSync();
-            }}
+            onClick={handleManualRefresh}
             disabled={isSyncing}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl transition active:scale-95 shadow-sm shadow-blue-500/20"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
-            {isSyncing ? 'Sinkronisasi...' : 'Sync Sekarang'}
+            {isSyncing ? 'Memuat...' : 'Tarik Data'}
           </button>
         </div>
 
-        <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-1 text-xs">
-          <div className="flex justify-between">
-            <span className="text-slate-500">Terakhir Sinkron:</span>
-            <span className="font-semibold text-slate-800">
-              {config.lastSyncedAt ? formatDateTime(config.lastSyncedAt) : 'Belum pernah'}
+        {refreshedSuccess && (
+          <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs px-3 py-2 rounded-xl flex items-center gap-1.5 font-medium">
+            <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+            Data berhasil disinkronkan dengan Supabase Cloud!
+          </div>
+        )}
+
+        <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2 text-xs">
+          <div className="flex justify-between items-center">
+            <span className="text-slate-500">Koneksi Database:</span>
+            <span className="font-semibold text-slate-800 flex items-center gap-1">
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+              qlcrjmycgfcswwqphgyv.supabase.co
             </span>
           </div>
-          <div className="flex justify-between">
-            <span className="text-slate-500">Antrian Offline (Queue):</span>
-            <span className="font-bold text-blue-600">{syncQueue.length} perubahan</span>
+          <div className="flex justify-between items-center">
+            <span className="text-slate-500">Mode Sinkronisasi:</span>
+            <span className="font-bold text-emerald-600">Otomatis 2 Arah (HP &amp; Laptop)</span>
+          </div>
+          <div className="flex justify-between items-center">
+            <span className="text-slate-500">Kecepatan Replikasi:</span>
+            <span className="font-semibold text-slate-800">Instan / Realtime (&lt; 100ms)</span>
           </div>
         </div>
 
-        {/* Input Google Apps Script Web App URL */}
-        <div className="space-y-2 pt-1 text-xs">
-          <label className="font-bold text-slate-700 block">
-            Google Apps Script Web App URL:
-          </label>
-          <input
-            type="url"
-            value={scriptUrl}
-            onChange={(e) => setScriptUrl(e.target.value)}
-            placeholder="https://script.google.com/macros/s/.../exec"
-            className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs font-mono"
-          />
-          <p className="text-[10px] text-slate-400">
-            Pastikan URL berakhiran <b>/exec</b> (didapat setelah Deploy &gt; New deployment).
-          </p>
-
-          <div className="flex items-center justify-between pt-1">
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={autoSync}
-                onChange={(e) => setAutoSync(e.target.checked)}
-                className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-4 h-4"
-              />
-              <span className="text-xs font-semibold text-slate-700">Otomatis sync saat online</span>
-            </label>
-
-            <button
-              onClick={handleSave}
-              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-xl text-xs transition flex items-center gap-1"
-            >
-              {savedSuccess ? (
-                <>
-                  <Check className="w-3.5 h-3.5 text-green-400" />
-                  <span>Tersimpan</span>
-                </>
-              ) : (
-                'Simpan URL'
-              )}
-            </button>
+        {/* Data Counter */}
+        <div className="grid grid-cols-3 gap-2 pt-1 text-center">
+          <div className="bg-blue-50/60 p-2.5 rounded-xl border border-blue-100">
+            <div className="text-lg font-black text-blue-700">{ordersCount}</div>
+            <div className="text-[10px] font-semibold text-blue-600">Pesanan</div>
           </div>
-
-          {/* 1-Click Cross Device Link for HP */}
-          {scriptUrl.trim() && (
-            <div className="mt-2 pt-2.5 border-t border-slate-200 bg-blue-50/70 p-3 rounded-xl border space-y-2">
-              <div className="flex items-center gap-1.5 text-blue-900 font-bold text-xs">
-                <Smartphone className="w-4 h-4 text-blue-600 shrink-0" />
-                <span>Hubungkan Aplikasi di HP (Auto-Sync)</span>
-              </div>
-              <p className="text-[11px] text-blue-800 leading-relaxed">
-                Salin tautan di bawah dan buka di HP atau kirim via WhatsApp. Aplikasi di HP akan langsung otomatis terhubung ke Spreadsheet yang sama!
-              </p>
-              <button
-                type="button"
-                onClick={handleCopyShareLink}
-                className={`w-full py-2 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm active:scale-95 ${
-                  copiedShareLink
-                    ? 'bg-emerald-600 text-white shadow-emerald-600/20'
-                    : 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-500/20'
-                }`}
-              >
-                {copiedShareLink ? (
-                  <>
-                    <Check className="w-4 h-4" />
-                    <span>Link Tersalin! Buka di browser HP Anda</span>
-                  </>
-                ) : (
-                  <>
-                    <Share2 className="w-4 h-4" />
-                    <span>Salin Link Buka di HP (Auto-Sync)</span>
-                  </>
-                )}
-              </button>
-            </div>
-          )}
+          <div className="bg-purple-50/60 p-2.5 rounded-xl border border-purple-100">
+            <div className="text-lg font-black text-purple-700">{customersCount}</div>
+            <div className="text-[10px] font-semibold text-purple-600">Pelanggan</div>
+          </div>
+          <div className="bg-emerald-50/60 p-2.5 rounded-xl border border-emerald-100">
+            <div className="text-lg font-black text-emerald-700">{servicesCount}</div>
+            <div className="text-[10px] font-semibold text-emerald-600">Layanan</div>
+          </div>
         </div>
       </div>
 
-      {/* 1-Click Google Apps Script Code Setup */}
-      <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm space-y-3">
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="font-bold text-xs text-slate-900">Script Google Apps Script Terbaru</h3>
-            <p className="text-[10px] text-slate-400">Kode backend otomatis buat header & data</p>
-          </div>
-          <button
-            onClick={handleCopyScript}
-            className={`flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold transition ${
-              copied ? 'bg-green-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-            }`}
-          >
-            {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-            {copied ? 'Tersalin!' : 'Salin Kode'}
-          </button>
-        </div>
-
-        <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl space-y-2 text-xs">
-          <p className="font-bold text-amber-900">⚠️ PENTING SAAT DEPLOY:</p>
-          <ol className="list-decimal pl-4 space-y-1.5 text-[11px] text-amber-800">
-            <li>Buka Google Sheets Anda &gt; menu <b>Ekstensi &gt; Apps Script</b>.</li>
-            <li>Hapus semua kode lama, lalu <b>Paste kode yang disalin di atas</b>, dan klik Simpan.</li>
-            <li>Klik tombol biru <b>Deploy (Terapkan) &gt; New deployment (Penerapan baru)</b>.</li>
-            <li>Di opsi <b>"Who has access" (Akses)</b>: WAJIB pilih <b>"Anyone" (Siapa saja)</b>. <i>(Jangan 'Only myself')</i>.</li>
-            <li>Klik <b>Deploy</b> &gt; Klik <b>Authorize access</b> &gt; Akun Google &gt; <b>Advanced (Lanjutan)</b> &gt; <b>Go to project (unsafe)</b> &gt; <b>Allow (Izinkan)</b>.</li>
-            <li>Salin <b>Web app URL</b> dan tempelkan di kotak URL di atas, lalu klik <b>Sync Sekarang</b>.</li>
-          </ol>
-        </div>
-      </div>
-
-      {/* Database Reset / Maintenance */}
+      {/* Offline First Information Card */}
       <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm space-y-2 text-xs">
         <h3 className="font-bold text-xs text-slate-900 flex items-center gap-1.5">
-          <Database className="w-3.5 h-3.5 text-slate-600" />
-          Penyimpanan Lokal (IndexedDB)
+          <Database className="w-3.5 h-3.5 text-blue-600" />
+          Offline First &amp; Keamanan Data
         </h3>
-        <p className="text-[11px] text-slate-500">
-          Aplikasi menggunakan IndexedDB untuk menyimpan data secara aman di perangkat Anda bahkan tanpa koneksi internet.
+        <p className="text-[11px] text-slate-600 leading-relaxed">
+          Semua data tersimpan ganda di <b>Supabase Cloud</b> dan di memori lokal <b>IndexedDB perangkat</b>. Jika kasir sedang offline / mati internet, aplikasi tetap dapat membuat nota secara lancar dan otomatis tersinkronisasi begitu internet kembali online.
         </p>
+      </div>
 
-        <div className="pt-2 flex justify-end">
+      {/* Reset Cache / Maintenance */}
+      <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm space-y-2 text-xs">
+        <div className="flex justify-between items-center">
+          <div>
+            <h4 className="font-bold text-slate-800 text-xs">Reset Cache Lokal</h4>
+            <p className="text-[10px] text-slate-400">Kembalikan data lokal ke data awal demo</p>
+          </div>
           <button
             onClick={() => {
-              if (confirm('Reset database lokal ke data bawaan demo?')) {
+              if (confirm('Apakah Anda yakin ingin mereset database lokal ke data demo?')) {
                 onResetData();
               }
             }}
-            className="text-[11px] text-red-500 hover:underline font-semibold"
+            className="text-[11px] text-red-500 hover:text-red-700 font-semibold px-2.5 py-1 rounded-lg border border-red-200 hover:bg-red-50 transition"
           >
-            Reset ke Data Awal Demo
+            Reset Data Demo
           </button>
         </div>
       </div>

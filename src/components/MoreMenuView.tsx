@@ -11,8 +11,17 @@ interface MoreMenuViewProps {
   onOpenInstall?: () => void;
 }
 
-export const MoreMenuView: React.FC<MoreMenuViewProps> = ({ onSelectSubView, syncQueueCount, onOpenInstall }) => {
-  const menuItems = [
+interface MenuItem {
+  id: MoreSubView;
+  title: string;
+  desc: string;
+  icon: any;
+  iconColor: string;
+  badge?: string;
+}
+
+export const MoreMenuView: React.FC<MoreMenuViewProps> = ({ onSelectSubView, onOpenInstall }) => {
+  const menuItems: MenuItem[] = [
     {
       id: 'services' as MoreSubView,
       title: 'Manajemen Layanan',
@@ -36,11 +45,10 @@ export const MoreMenuView: React.FC<MoreMenuViewProps> = ({ onSelectSubView, syn
     },
     {
       id: 'sync' as MoreSubView,
-      title: 'Google Sheets & Offline Sync',
-      desc: 'Sinkronisasi database spreadsheet & IndexedDB offline',
+      title: 'Database Cloud (Supabase)',
+      desc: 'Status koneksi realtime, sinkronisasi cloud & offline',
       icon: Cloud,
       iconColor: 'text-purple-600 bg-purple-50',
-      badge: syncQueueCount > 0 ? `${syncQueueCount} antrian` : undefined,
     },
   ];
 
