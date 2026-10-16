@@ -205,11 +205,38 @@ export default function Home() {
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
 
+    // Periodic background sync & on window focus / tab visibility change (real-time cross-device sync)
+    const performBackgroundSync = async () => {
+      if (typeof window !== 'undefined' && navigator.onLine && document.visibilityState === 'visible') {
+        const cfg = await getSheetsConfig();
+        if (cfg.scriptUrl && cfg.autoSync) {
+          try {
+            const res = await syncToGoogleSheets();
+            if (res.success) {
+              const freshOrders = await getAllOrders();
+              const freshCustomers = await getAllCustomers();
+              const freshServices = await getAllServices();
+              setOrders(freshOrders);
+              setCustomers(freshCustomers);
+              setServices(freshServices);
+            }
+          } catch (e) {}
+        }
+      }
+    };
+
+    window.addEventListener('focus', performBackgroundSync);
+    document.addEventListener('visibilitychange', performBackgroundSync);
+    const syncInterval = setInterval(performBackgroundSync, 15000);
+
     return () => {
       window.removeEventListener('beforeinstallprompt', handleBeforeInstall);
       window.removeEventListener('appinstalled', handleAppInstalled);
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('focus', performBackgroundSync);
+      document.removeEventListener('visibilitychange', performBackgroundSync);
+      clearInterval(syncInterval);
     };
   }, []);
 
@@ -497,6 +524,8 @@ export default function Home() {
             onSaveCustomer={handleSaveCustomer}
             onDeleteCustomer={handleDeleteCustomer}
             onViewReceipt={setActiveReceiptOrder}
+            onSync={handleTriggerSync}
+            isSyncing={isSyncing}
           />
         )}
 
@@ -558,6 +587,18 @@ export default function Home() {
         onSelectTab={(tab) => {
           setCurrentTab(tab);
           if (tab === 'more') setMoreSubView('menu');
+          if (isOnline && sheetsConfig.scriptUrl && (tab === 'customers' || tab === 'orders' || tab === 'dashboard')) {
+            syncToGoogleSheets().then(async (res) => {
+              if (res.success) {
+                const freshOrders = await getAllOrders();
+                const freshCustomers = await getAllCustomers();
+                const freshServices = await getAllServices();
+                setOrders(freshOrders);
+                setCustomers(freshCustomers);
+                setServices(freshServices);
+              }
+            }).catch(() => {});
+          }
         }}
         activeOrdersCount={activeOrdersCount}
       />

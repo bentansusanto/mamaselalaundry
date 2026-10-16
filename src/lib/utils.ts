@@ -45,9 +45,9 @@ export function parseSafeDate(dateStr: string | undefined | null): Date | null {
 }
 
 export function formatDate(dateString: string | undefined | null): string {
-  if (!dateString) return '-';
+  if (!dateString || dateString === 'Invalid Date' || dateString === 'null' || dateString === 'undefined') return '-';
   const date = parseSafeDate(dateString);
-  if (!date) return String(dateString).split(',')[0] || String(dateString);
+  if (!date) return '-';
   try {
     return new Intl.DateTimeFormat('id-ID', {
       day: 'numeric',
@@ -55,14 +55,14 @@ export function formatDate(dateString: string | undefined | null): string {
       year: 'numeric',
     }).format(date);
   } catch {
-    return String(dateString);
+    return '-';
   }
 }
 
 export function formatDateTime(dateString: string | undefined | null): string {
-  if (!dateString) return '-';
+  if (!dateString || dateString === 'Invalid Date' || dateString === 'null' || dateString === 'undefined') return '-';
   const date = parseSafeDate(dateString);
-  if (!date) return String(dateString);
+  if (!date) return '-';
   try {
     return new Intl.DateTimeFormat('id-ID', {
       day: 'numeric',
@@ -72,7 +72,7 @@ export function formatDateTime(dateString: string | undefined | null): string {
       minute: '2-digit',
     }).format(date);
   } catch {
-    return String(dateString);
+    return '-';
   }
 }
 

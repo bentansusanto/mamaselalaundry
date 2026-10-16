@@ -18,6 +18,7 @@ import {
   MessageCircle,
   Calendar,
   CheckCircle2,
+  RefreshCw,
 } from 'lucide-react';
 
 interface CustomersViewProps {
@@ -26,6 +27,8 @@ interface CustomersViewProps {
   onSaveCustomer: (customer: Customer) => void;
   onDeleteCustomer: (id: string) => void;
   onViewReceipt: (order: Order) => void;
+  onSync?: () => void;
+  isSyncing?: boolean;
 }
 
 export const CustomersView: React.FC<CustomersViewProps> = ({
@@ -34,6 +37,8 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
   onSaveCustomer,
   onDeleteCustomer,
   onViewReceipt,
+  onSync,
+  isSyncing,
 }) => {
   const [search, setSearch] = useState('');
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
@@ -139,13 +144,25 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
               Total {customers.length} pelanggan terdaftar
             </p>
           </div>
-          <button
-            onClick={handleOpenAdd}
-            className="flex items-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition active:scale-95 shadow-sm shadow-blue-500/20"
-          >
-            <UserPlus className="w-4 h-4" />
-            <span>Tambah</span>
-          </button>
+          <div className="flex items-center gap-2">
+            {onSync && (
+              <button
+                onClick={onSync}
+                disabled={isSyncing}
+                title="Tarik data terbaru dari Google Sheets"
+                className="p-2 rounded-xl border border-blue-200 bg-blue-50 text-blue-600 hover:bg-blue-100 transition active:scale-95 disabled:opacity-50"
+              >
+                <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
+              </button>
+            )}
+            <button
+              onClick={handleOpenAdd}
+              className="flex items-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition active:scale-95 shadow-sm shadow-blue-500/20"
+            >
+              <UserPlus className="w-4 h-4" />
+              <span>Tambah</span>
+            </button>
+          </div>
         </div>
 
         <div className="relative">

@@ -147,12 +147,21 @@ export async function getAllOrders(): Promise<Order[]> {
   const db = await getDB();
   if (!db) return [];
   const orders = await db.getAll('orders');
+  for (const o of orders) {
+    if (!o.createdAt || o.createdAt === 'Invalid Date') {
+      o.createdAt = new Date().toISOString();
+      await db.put('orders', o);
+    }
+  }
   return orders.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 }
 
 export async function saveOrder(order: Order): Promise<void> {
   const db = await getDB();
   if (!db) return;
+  if (!order.createdAt || order.createdAt === 'Invalid Date') {
+    order.createdAt = new Date().toISOString();
+  }
   await db.put('orders', order);
   // add to sync queue
   await queueSync('orders', 'update', order);
@@ -161,12 +170,22 @@ export async function saveOrder(order: Order): Promise<void> {
 export async function getAllCustomers(): Promise<Customer[]> {
   const db = await getDB();
   if (!db) return [];
-  return await db.getAll('customers');
+  const list = await db.getAll('customers');
+  for (const c of list) {
+    if (!c.createdAt || c.createdAt === 'Invalid Date') {
+      c.createdAt = new Date().toISOString();
+      await db.put('customers', c);
+    }
+  }
+  return list;
 }
 
 export async function saveCustomer(customer: Customer): Promise<void> {
   const db = await getDB();
   if (!db) return;
+  if (!customer.createdAt || customer.createdAt === 'Invalid Date') {
+    customer.createdAt = new Date().toISOString();
+  }
   await db.put('customers', customer);
   await queueSync('customers', 'update', customer);
 }
