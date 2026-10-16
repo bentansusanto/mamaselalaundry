@@ -45,8 +45,8 @@ export const MoreMenuView: React.FC<MoreMenuViewProps> = ({ onSelectSubView, onO
     },
     {
       id: 'sync' as MoreSubView,
-      title: 'Database Cloud (Supabase)',
-      desc: 'Status koneksi realtime, sinkronisasi cloud & offline',
+      title: 'Sinkronisasi & Cadangan Cloud',
+      desc: 'Status sinkronisasi realtime, multi-perangkat & unduh backup',
       icon: Cloud,
       iconColor: 'text-purple-600 bg-purple-50',
     },
