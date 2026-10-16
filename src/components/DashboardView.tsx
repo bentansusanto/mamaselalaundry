@@ -39,13 +39,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const activeOrders = (orders || []).filter((o) => o.progressStatus !== 'Selesai');
   const totalOrdersCount = (orders || []).length;
 
-  // Chart Data preparation based on Period
+  // Chart Data preparation based on Period (100% Real Data)
   const chartData = React.useMemo(() => {
     if (chartPeriod === 'Month') {
-      // Days of the month (e.g. 1-31)
+      // Days of the month (recent 7 days)
       const daysMap: Record<string, number> = {};
       const now = new Date();
-      // Initialize recent 7 days
       for (let i = 6; i >= 0; i--) {
         const d = new Date(now);
         d.setDate(d.getDate() - i);
@@ -67,33 +66,51 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     }
 
     if (chartPeriod === 'Quarter') {
-      // 3 Months of current Quarter
-      const quarterMonths = ['Bln 1', 'Bln 2', 'Bln 3'];
-      const dataMap = { 'Bln 1': 0, 'Bln 2': 0, 'Bln 3': 0 };
+      // Months of current Quarter
+      const now = new Date();
+      const currentYear = now.getFullYear();
+      const currentQuarter = Math.floor(now.getMonth() / 3);
+      const startMonth = currentQuarter * 3;
+      const quarterMap: Record<string, number> = {};
+
+      for (let i = 0; i < 3; i++) {
+        const d = new Date(currentYear, startMonth + i, 1);
+        const mLabel = d.toLocaleString('id-ID', { month: 'short' });
+        quarterMap[mLabel] = 0;
+      }
 
       (orders || []).forEach((o) => {
         const d = parseSafeDate(o.createdAt);
-        if (d) {
-          const month = d.getMonth();
-          const qIndex = month % 3;
-          const key = quarterMonths[qIndex] as keyof typeof dataMap;
-          dataMap[key] += o.totalPrice || 0;
+        if (d && d.getFullYear() === currentYear) {
+          const mLabel = d.toLocaleString('id-ID', { month: 'short' });
+          if (quarterMap[mLabel] !== undefined) {
+            quarterMap[mLabel] += o.totalPrice || 0;
+          }
         }
       });
 
-      return Object.entries(dataMap).map(([name, total]) => ({ name, total }));
+      return Object.entries(quarterMap).map(([name, total]) => ({ name, total }));
     }
 
-    // Years (Last 4 Months)
-    const monthNames = ['Agu', 'Sep', 'Okt', 'Nov'];
-    const yearMap: Record<string, number> = { Agu: 45000, Sep: 85000, Okt: 120000, Nov: 0 };
+    // Years (Real monthly breakdown of recent 6 months, strictly 0 initialized)
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth();
+    const yearMap: Record<string, number> = {};
+
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(currentYear, currentMonth - i, 1);
+      const mLabel = d.toLocaleString('id-ID', { month: 'short' });
+      yearMap[mLabel] = 0;
+    }
+
     (orders || []).forEach((o) => {
       const d = parseSafeDate(o.createdAt);
       if (d) {
         try {
-          const m = d.toLocaleString('id-ID', { month: 'short' });
-          if (yearMap[m] !== undefined) {
-            yearMap[m] += o.totalPrice || 0;
+          const mLabel = d.toLocaleString('id-ID', { month: 'short' });
+          if (yearMap[mLabel] !== undefined) {
+            yearMap[mLabel] += o.totalPrice || 0;
           }
         } catch {}
       }
