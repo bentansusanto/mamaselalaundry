@@ -85,43 +85,53 @@ export function getDB() {
   return dbPromise;
 }
 
-// Initialize seed data if empty
+// Initialize seed data if empty (only on the very first time ever)
 export async function initDatabaseDefaults() {
   const db = await getDB();
   if (!db) return;
 
-  const servicesCount = await db.count('services');
-  if (servicesCount === 0) {
-    const tx = db.transaction('services', 'readwrite');
-    for (const item of INITIAL_SERVICES) {
-      await tx.store.put(item);
+  const isInitialized = await db.get('settings', 'database_initialized');
+  if (!isInitialized) {
+    const servicesCount = await db.count('services');
+    const ordersCount = await db.count('orders');
+    const usersCount = await db.count('users');
+
+    // If existing database already has data, mark as initialized without re-seeding
+    if (servicesCount > 0 || ordersCount > 0 || usersCount > 0) {
+      await db.put('settings', true, 'database_initialized');
+    } else {
+      // First-time fresh install: load initial default data
+      const txServices = db.transaction('services', 'readwrite');
+      for (const item of INITIAL_SERVICES) {
+        await txServices.store.put(item);
+      }
+      await txServices.done;
+
+      const txCustomers = db.transaction('customers', 'readwrite');
+      for (const item of INITIAL_CUSTOMERS) {
+        await txCustomers.store.put(item);
+      }
+      await txCustomers.done;
+
+      const txOrders = db.transaction('orders', 'readwrite');
+      for (const item of INITIAL_ORDERS) {
+        await txOrders.store.put(item);
+      }
+      await txOrders.done;
+
+      await db.put('settings', true, 'database_initialized');
     }
-    await tx.done;
   }
 
-  const customersCount = await db.count('customers');
-  if (customersCount === 0) {
-    const tx = db.transaction('customers', 'readwrite');
-    for (const item of INITIAL_CUSTOMERS) {
-      await tx.store.put(item);
-    }
-    await tx.done;
-  }
-
+  // Ensure current user is synced to single user Mama Sela
   const currentUsers = await db.getAll('users');
-  if (currentUsers.length === 0 || currentUsers.some((u) => u.name === 'Budi Santoso' || u.name === 'Siti Rahma')) {
+  if (
+    currentUsers.length === 0 ||
+    currentUsers.some((u) => u.name === 'Budi Santoso' || u.name === 'Siti Rahma')
+  ) {
     const tx = db.transaction('users', 'readwrite');
     await tx.store.clear();
     for (const item of INITIAL_USERS) {
-      await tx.store.put(item);
-    }
-    await tx.done;
-  }
-
-  const ordersCount = await db.count('orders');
-  if (ordersCount === 0) {
-    const tx = db.transaction('orders', 'readwrite');
-    for (const item of INITIAL_ORDERS) {
       await tx.store.put(item);
     }
     await tx.done;
@@ -131,7 +141,7 @@ export async function initDatabaseDefaults() {
 // Helper CRUD operations
 export async function getAllOrders(): Promise<Order[]> {
   const db = await getDB();
-  if (!db) return INITIAL_ORDERS;
+  if (!db) return [];
   const orders = await db.getAll('orders');
   return orders.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 }
@@ -146,7 +156,7 @@ export async function saveOrder(order: Order): Promise<void> {
 
 export async function getAllCustomers(): Promise<Customer[]> {
   const db = await getDB();
-  if (!db) return INITIAL_CUSTOMERS;
+  if (!db) return [];
   return await db.getAll('customers');
 }
 
@@ -166,7 +176,7 @@ export async function deleteCustomer(id: string): Promise<void> {
 
 export async function getAllServices(): Promise<ServiceItem[]> {
   const db = await getDB();
-  if (!db) return INITIAL_SERVICES;
+  if (!db) return [];
   return await db.getAll('services');
 }
 
