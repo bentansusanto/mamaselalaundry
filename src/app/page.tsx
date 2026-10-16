@@ -205,12 +205,15 @@ export default function Home() {
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
 
-    // Periodic background sync & on window focus / tab visibility change (real-time cross-device sync)
+    // Periodic background sync & on window focus / tab visibility change (real-time cross-device sync every 3 seconds)
+    let isPerformingSync = false;
     const performBackgroundSync = async () => {
+      if (isPerformingSync) return;
       if (typeof window !== 'undefined' && navigator.onLine && document.visibilityState === 'visible') {
         const cfg = await getSheetsConfig();
         if (cfg.scriptUrl && cfg.autoSync) {
           try {
+            isPerformingSync = true;
             const res = await syncToGoogleSheets();
             if (res.success) {
               const freshOrders = await getAllOrders();
@@ -220,14 +223,17 @@ export default function Home() {
               setCustomers(freshCustomers);
               setServices(freshServices);
             }
-          } catch (e) {}
+          } catch (e) {
+          } finally {
+            isPerformingSync = false;
+          }
         }
       }
     };
 
     window.addEventListener('focus', performBackgroundSync);
     document.addEventListener('visibilitychange', performBackgroundSync);
-    const syncInterval = setInterval(performBackgroundSync, 15000);
+    const syncInterval = setInterval(performBackgroundSync, 3000);
 
     return () => {
       window.removeEventListener('beforeinstallprompt', handleBeforeInstall);
