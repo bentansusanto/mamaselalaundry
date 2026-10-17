@@ -16,7 +16,7 @@ import {
 } from './db';
 
 // Supabase client instance
-const supabase = createClient();
+export const supabase = createClient();
 
 /**
  * Fetch all data from Supabase and sync into local IndexedDB

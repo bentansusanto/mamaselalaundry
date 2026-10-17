@@ -1,5 +1,5 @@
 // Service Worker for Mama Sela Laundry PWA
-const CACHE_NAME = 'mamasela-laundry-v3';
+const CACHE_NAME = 'mamasela-laundry-v4';
 const PRECACHE_ASSETS = [
   '/',
   '/manifest.json',

@@ -6,6 +6,8 @@ import {
   initDatabaseDefaults,
   getAllOrders,
   saveOrder,
+  deleteOrder,
+  getDB,
   getAllCustomers,
   saveCustomer,
   deleteCustomer,
@@ -17,6 +19,7 @@ import {
   getSyncQueue,
 } from '@/lib/db';
 import {
+  supabase,
   pullFromSupabase,
   subscribeToSupabaseRealtime,
   syncCustomerToSupabase,
@@ -351,6 +354,38 @@ export default function Home() {
     );
   };
 
+  const handleDeleteOrder = async (orderId: string) => {
+    await deleteOrder(orderId);
+    if (isOnline) {
+      deleteOrderFromSupabase(orderId);
+    }
+    const updated = await getAllOrders();
+    setOrders(updated);
+    showNotice(`Pesanan #${orderId} berhasil dihapus!`, 'warning');
+  };
+
+  const handleClearAllOrders = async () => {
+    const db = await getDB();
+    if (db) {
+      const tx = db.transaction(['orders', 'syncQueue'], 'readwrite');
+      await tx.objectStore('orders').clear();
+      await tx.objectStore('syncQueue').clear();
+      await tx.done;
+    }
+    setOrders([]);
+    if (isOnline) {
+      try {
+        const { data: oList } = await supabase.from('orders').select('id');
+        if (oList && oList.length > 0) {
+          await supabase.from('orders').delete().in('id', oList.map((o: any) => o.id));
+        }
+      } catch (e) {
+        console.error('Error clearing orders from Supabase:', e);
+      }
+    }
+    showNotice('Semua data pesanan berhasil dibersihkan!', 'success');
+  };
+
   // Customer Handlers
   const handleSaveCustomer = async (cust: Customer) => {
     await saveCustomer(cust);
@@ -491,6 +526,8 @@ export default function Home() {
             onUpdateStatus={handleUpdateOrderStatus}
             onUpdatePayment={handleUpdatePaymentStatus}
             onViewReceipt={setActiveReceiptOrder}
+            onDeleteOrder={handleDeleteOrder}
+            onClearAllOrders={handleClearAllOrders}
           />
         )}
 

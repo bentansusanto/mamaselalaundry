@@ -123,6 +123,17 @@ export async function initDatabaseDefaults() {
     await tx.done;
   }
 
+  // Fourth cleanup: force complete wipe of orders, customers and syncQueue
+  const isResetV4 = await db.get('settings', 'reset_orders_customers_v4');
+  if (!isResetV4) {
+    const tx = db.transaction(['orders', 'customers', 'syncQueue', 'settings'], 'readwrite');
+    await tx.objectStore('orders').clear();
+    await tx.objectStore('customers').clear();
+    await tx.objectStore('syncQueue').clear();
+    await tx.objectStore('settings').put(true, 'reset_orders_customers_v4');
+    await tx.done;
+  }
+
   const isInitialized = await db.get('settings', 'database_initialized');
   if (!isInitialized) {
     const servicesCount = await db.count('services');
