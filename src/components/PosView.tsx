@@ -548,7 +548,7 @@ export const PosView: React.FC<PosViewProps> = ({
               onClick={() => setStep(3)}
               className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl text-xs transition shadow-sm shadow-blue-500/20"
             >
-              Lanjut ke Pembayaran ({formatRupiah(grandTotal)}) →
+              Proses Sekarang ({formatRupiah(grandTotal)}) →
             </button>
           </div>
         </div>
