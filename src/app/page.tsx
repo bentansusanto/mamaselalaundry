@@ -475,6 +475,7 @@ export default function Home() {
         {/* Tab 2: Kasir POS */}
         {currentTab === 'pos' && (
           <PosView
+            orders={orders}
             customers={customers}
             services={services}
             currentUser={currentUser}

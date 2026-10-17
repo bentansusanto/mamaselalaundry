@@ -3,9 +3,11 @@
 import React, { useState } from 'react';
 import { Customer, Order, OrderItemDetail, PaymentMethod, PaymentStatus, ServiceItem, SpeedType, UserAccount } from '@/types';
 import { calculateBilledWeight, formatRupiah, SPEED_FEES } from '@/lib/utils';
+import { getAllOrders } from '@/lib/db';
 import { User, Scale, Zap, CreditCard, Plus, Minus, Search, Check, AlertCircle, Sparkles, Banknote, QrCode, Flame, Clock } from 'lucide-react';
 
 interface PosViewProps {
+  orders?: Order[];
   customers: Customer[];
   services: ServiceItem[];
   currentUser: UserAccount;
@@ -14,6 +16,7 @@ interface PosViewProps {
 }
 
 export const PosView: React.FC<PosViewProps> = ({
+  orders,
   customers,
   services,
   currentUser,
@@ -106,7 +109,7 @@ export const PosView: React.FC<PosViewProps> = ({
     });
   };
 
-  const handleSubmitOrder = () => {
+  const handleSubmitOrder = async () => {
     if (!selectedCustomer) {
       alert('Pilih pelanggan terlebih dahulu!');
       setStep(1);
@@ -125,10 +128,28 @@ export const PosView: React.FC<PosViewProps> = ({
     if (speed === 'Kilat') hoursToAdd = 8; // Same day (8 jam)
     const estimatedDate = new Date(now.getTime() + hoursToAdd * 60 * 60 * 1000);
 
+    const dd = String(now.getDate()).padStart(2, '0');
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const yyyy = now.getFullYear();
+
+    // Determine auto-increment number: ORD-001-dd-mm-yyyy, ORD-002-dd-mm-yyyy, etc.
+    let existingOrders = orders && orders.length > 0 ? orders : await getAllOrders();
+    let maxNumber = 0;
+    for (const o of existingOrders) {
+      const match = o.id.match(/^ORD-(\d+)/i);
+      if (match) {
+        const num = parseInt(match[1], 10);
+        if (!isNaN(num) && num > maxNumber) {
+          maxNumber = num;
+        }
+      }
+    }
+    const nextNumber = maxNumber + 1;
+    const seqStr = String(nextNumber).padStart(3, '0');
+    const orderId = `ORD-${seqStr}-${dd}-${mm}-${yyyy}`;
+
     const newOrder: Order = {
-      id: `ORD-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(
-        now.getDate()
-      ).padStart(2, '0')}-${String(Math.floor(Math.random() * 900) + 100)}`,
+      id: orderId,
       customerId: selectedCustomer.id,
       customerName: selectedCustomer.name,
       customerPhone: selectedCustomer.phone,

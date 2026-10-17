@@ -112,6 +112,17 @@ export async function initDatabaseDefaults() {
     await tx.done;
   }
 
+  // Third cleanup: clear orders and customers for new format ORD-001-dd-mm-yyyy
+  const isResetV3 = await db.get('settings', 'reset_orders_customers_v3');
+  if (!isResetV3) {
+    const tx = db.transaction(['orders', 'customers', 'syncQueue', 'settings'], 'readwrite');
+    await tx.objectStore('orders').clear();
+    await tx.objectStore('customers').clear();
+    await tx.objectStore('syncQueue').clear();
+    await tx.objectStore('settings').put(true, 'reset_orders_customers_v3');
+    await tx.done;
+  }
+
   const isInitialized = await db.get('settings', 'database_initialized');
   if (!isInitialized) {
     const servicesCount = await db.count('services');
