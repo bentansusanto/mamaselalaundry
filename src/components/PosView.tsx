@@ -483,36 +483,12 @@ export const PosView: React.FC<PosViewProps> = ({
             </div>
           </div>
 
-          <div className="flex gap-2">
-            <button
-              onClick={() => setStep(1)}
-              className="py-2.5 px-4 bg-slate-200 hover:bg-slate-300 text-slate-700 font-semibold rounded-xl text-xs transition"
-            >
-              ← Kembali
-            </button>
-            <button
-              onClick={() => setStep(3)}
-              className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl text-xs transition shadow-sm shadow-blue-500/20"
-            >
-              Lanjut ke Kecepatan & Pembayaran ({formatRupiah(grandTotal)}) →
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* STEP 3: KECEPATAN & PEMBAYARAN */}
-      {step === 3 && (
-        <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-              <Zap className="w-4 h-4 text-blue-600" />
-              Langkah 3: Kecepatan & Pembayaran
-            </h2>
-          </div>
-
-          {/* Kecepatan Pengerjaan */}
-          <div className="space-y-2">
-            <label className="text-xs font-bold text-slate-700">Pilih Kecepatan Pengerjaan:</label>
+          {/* 3. Kecepatan Pengerjaan */}
+          <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm space-y-2.5">
+            <h3 className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+              <Zap className="w-4 h-4 text-amber-500" />
+              3. Kecepatan Pengerjaan
+            </h3>
             <div className="grid grid-cols-3 gap-2">
               {/* Normal */}
               <button
@@ -561,6 +537,33 @@ export const PosView: React.FC<PosViewProps> = ({
             </div>
           </div>
 
+          <div className="flex gap-2">
+            <button
+              onClick={() => setStep(1)}
+              className="py-2.5 px-4 bg-slate-200 hover:bg-slate-300 text-slate-700 font-semibold rounded-xl text-xs transition"
+            >
+              ← Kembali
+            </button>
+            <button
+              onClick={() => setStep(3)}
+              className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl text-xs transition shadow-sm shadow-blue-500/20"
+            >
+              Lanjut ke Pembayaran ({formatRupiah(grandTotal)}) →
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* STEP 3: PEMBAYARAN */}
+      {step === 3 && (
+        <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+              <CreditCard className="w-4 h-4 text-blue-600" />
+              Langkah 3: Pembayaran
+            </h2>
+          </div>
+
           {/* Ringkasan Biaya */}
           <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-1.5 text-xs">
             <div className="flex justify-between text-slate-600">
@@ -577,12 +580,10 @@ export const PosView: React.FC<PosViewProps> = ({
                 <span>{formatRupiah(item.total)}</span>
               </div>
             ))}
-            {speedFee > 0 && (
-              <div className="flex justify-between text-slate-600">
-                <span>Tambahan Kecepatan ({speed}):</span>
-                <span>{formatRupiah(speedFee)}</span>
-              </div>
-            )}
+            <div className="flex justify-between text-slate-600">
+              <span>Kecepatan ({speed}):</span>
+              <span>{speedFee > 0 ? formatRupiah(speedFee) : 'Standar (+Rp 0)'}</span>
+            </div>
             <div className="border-t border-slate-300 pt-1.5 flex justify-between font-extrabold text-sm text-slate-900">
               <span>Total Tagihan:</span>
               <span className="text-blue-600">{formatRupiah(grandTotal)}</span>

@@ -130,9 +130,11 @@ export default function Home() {
       if (typeof window !== 'undefined' && navigator.onLine) {
         try {
           const res = await syncOfflineQueueToSupabase();
-          if (res.customers.length > 0) setCustomers(res.customers);
-          if (res.orders.length > 0) setOrders(res.orders);
-          if (res.services.length > 0) setServices(res.services);
+          if (res.success) {
+            setCustomers(res.customers);
+            setOrders(res.orders);
+            if (res.services.length > 0) setServices(res.services);
+          }
         } catch (supaErr) {
           console.warn('Initial Supabase sync error:', supaErr);
         }
@@ -170,9 +172,11 @@ export default function Home() {
       showNotice('Koneksi internet online! Menyinkronkan data offline...', 'success');
       try {
         const res = await syncOfflineQueueToSupabase();
-        if (res.customers.length > 0) setCustomers(res.customers);
-        if (res.orders.length > 0) setOrders(res.orders);
-        if (res.services.length > 0) setServices(res.services);
+        if (res.success) {
+          setCustomers(res.customers);
+          setOrders(res.orders);
+          if (res.services.length > 0) setServices(res.services);
+        }
 
         if (res.syncedCount > 0) {
           showNotice(`${res.syncedCount} transaksi offline berhasil disinkronkan ke cloud!`, 'success');
@@ -196,9 +200,11 @@ export default function Home() {
       if (typeof window !== 'undefined' && navigator.onLine && document.visibilityState === 'visible') {
         try {
           const res = await syncOfflineQueueToSupabase();
-          if (res.customers.length > 0) setCustomers(res.customers);
-          if (res.orders.length > 0) setOrders(res.orders);
-          if (res.services.length > 0) setServices(res.services);
+          if (res.success) {
+            setCustomers(res.customers);
+            setOrders(res.orders);
+            if (res.services.length > 0) setServices(res.services);
+          }
         } catch (e) {}
       }
     };
@@ -266,9 +272,11 @@ export default function Home() {
     setIsSyncing(true);
     try {
       const res = await syncOfflineQueueToSupabase();
-      if (res.customers.length > 0) setCustomers(res.customers);
-      if (res.orders.length > 0) setOrders(res.orders);
-      if (res.services.length > 0) setServices(res.services);
+      if (res.success) {
+        setCustomers(res.customers);
+        setOrders(res.orders);
+        if (res.services.length > 0) setServices(res.services);
+      }
       showNotice(
         res.syncedCount > 0
           ? `${res.syncedCount} perubahan offline berhasil disinkronkan ke cloud!`

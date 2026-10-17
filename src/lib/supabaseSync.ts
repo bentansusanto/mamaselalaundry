@@ -80,24 +80,27 @@ export async function pullFromSupabase(): Promise<{
     }));
 
     if (db) {
-      if (customers.length > 0) {
+      if (!custRes.error) {
         const txC = db.transaction('customers', 'readwrite');
+        await txC.store.clear();
         for (const c of customers) {
           await txC.store.put(c);
         }
         await txC.done;
       }
 
-      if (orders.length > 0) {
+      if (!ordRes.error) {
         const txO = db.transaction('orders', 'readwrite');
+        await txO.store.clear();
         for (const o of orders) {
           await txO.store.put(o);
         }
         await txO.done;
       }
 
-      if (services.length > 0) {
+      if (!srvRes.error && services.length > 0) {
         const txS = db.transaction('services', 'readwrite');
+        await txS.store.clear();
         for (const s of services) {
           await txS.store.put(s);
         }

@@ -101,6 +101,17 @@ export async function initDatabaseDefaults() {
     await tx.done;
   }
 
+  // Second cleanup: reset orders and customers as requested by user
+  const isResetV2 = await db.get('settings', 'reset_orders_customers_v2');
+  if (!isResetV2) {
+    const tx = db.transaction(['orders', 'customers', 'syncQueue', 'settings'], 'readwrite');
+    await tx.objectStore('orders').clear();
+    await tx.objectStore('customers').clear();
+    await tx.objectStore('syncQueue').clear();
+    await tx.objectStore('settings').put(true, 'reset_orders_customers_v2');
+    await tx.done;
+  }
+
   const isInitialized = await db.get('settings', 'database_initialized');
   if (!isInitialized) {
     const servicesCount = await db.count('services');
