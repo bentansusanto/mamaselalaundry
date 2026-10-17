@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Customer, Order, OrderProgressStatus, PaymentStatus, ServiceItem, UserAccount } from '@/types';
+import { Customer, Order, OrderProgressStatus, PaymentStatus, PaymentMethod, ServiceItem, UserAccount } from '@/types';
 import {
   initDatabaseDefaults,
   getAllOrders,
@@ -323,12 +323,18 @@ export default function Home() {
     showNotice(`Status pesanan diperbarui: ${nextStatus}`, 'success');
   };
 
-  const handleUpdatePaymentStatus = async (orderId: string, paymentStatus: PaymentStatus) => {
+  const handleUpdatePaymentStatus = async (
+    orderId: string,
+    paymentStatus: PaymentStatus,
+    paymentMethod?: PaymentMethod
+  ) => {
     const order = orders.find((o) => o.id === orderId);
     if (!order) return;
+    const finalMethod = paymentMethod || order.paymentMethod || 'Cash';
     const updatedOrder: Order = {
       ...order,
       paymentStatus,
+      paymentMethod: finalMethod,
       paymentDate: paymentStatus === 'Lunas' ? new Date().toISOString() : undefined,
     };
     await saveOrder(updatedOrder);
@@ -337,7 +343,12 @@ export default function Home() {
     }
     const updated = await getAllOrders();
     setOrders(updated);
-    showNotice(`Pembayaran diperbarui: ${paymentStatus}`, 'success');
+    showNotice(
+      paymentStatus === 'Lunas'
+        ? `Pembayaran #${order.id} LUNAS via ${finalMethod}!`
+        : `Status pembayaran #${order.id}: Belum Bayar`,
+      'success'
+    );
   };
 
   // Customer Handlers
