@@ -34,6 +34,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ order, onClose }) =>
       : '';
 
     const text = `*NOTA LAUNDRY - MAMA SELA*
+Bida Asri 1 blok D1 no 12, Batam Center
 No. Order: *#${order.id}*
 Pelanggan: ${order.customerName}
 Tanggal Masuk: ${formatDateTime(order.createdAt)}
@@ -73,7 +74,7 @@ _Terima kasih telah mempercayakan pakaian Anda kepada kami!_`;
           <div className="text-center border-b border-dashed border-slate-300 pb-3">
             <h2 className="font-bold text-base font-sans tracking-wide text-blue-600">MAMA SELA LAUNDRY</h2>
             <p className="text-[11px] text-slate-500 font-sans">Pusat Cuci & Setrika Bersih Wangi</p>
-            <p className="text-[10px] text-slate-400 mt-0.5">Jl. Laundry Sejahtera No. 10 | 0812-3456-7890</p>
+            <p className="text-[10px] text-slate-500 mt-0.5">Bida Asri 1 blok D1 no 12, Batam Center</p>
           </div>
 
           <div className="space-y-1 border-b border-dashed border-slate-300 pb-2 text-[11px]">

@@ -115,8 +115,8 @@ export const MoreMenuView: React.FC<MoreMenuViewProps> = ({ onSelectSubView, onO
       {/* App Info Box */}
       <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200 text-center text-xs text-slate-500 space-y-1">
         <p className="font-bold text-slate-700">Mama Sela - POS & Laundry Management</p>
-        <p className="text-[11px]">Versi PWA 1.0.0 • Mobile-First Offline Ready</p>
-        <p className="text-[10px] text-slate-400">Next.js • Tailwind CSS • IndexedDB • Google Sheets</p>
+        <p className="text-[11px] text-blue-600 font-medium">Bida Asri 1 blok D1 no 12, Batam Center</p>
+        <p className="text-[10px] text-slate-400">Versi PWA 1.0.0 • Mobile-First Offline Ready</p>
       </div>
     </div>
   );
