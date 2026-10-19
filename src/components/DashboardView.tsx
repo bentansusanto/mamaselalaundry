@@ -19,6 +19,7 @@ interface DashboardViewProps {
   customers: Customer[];
   services: ServiceItem[];
   onGoToPos: () => void;
+  onGoToOrders?: () => void;
   onViewReceipt: (order: Order) => void;
 }
 
@@ -27,6 +28,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   customers,
   services,
   onGoToPos,
+  onGoToOrders,
   onViewReceipt,
 }) => {
   const [chartPeriod, setChartPeriod] = useState<'Month' | 'Quarter' | 'Years'>('Month');
@@ -36,6 +38,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     (sum, o) => sum + (o.paymentStatus === 'Lunas' ? (o.totalPrice || 0) : 0),
     0
   );
+  const unpaidOrders = (orders || []).filter((o) => o.paymentStatus === 'Belum Bayar');
+  const totalUnpaid = unpaidOrders.reduce((sum, o) => sum + (o.totalPrice || 0), 0);
   const activeOrders = (orders || []).filter((o) => o.progressStatus !== 'Selesai');
   const totalOrdersCount = (orders || []).length;
 
@@ -164,6 +168,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
       {/* Stats Grid */}
       <div className="grid grid-cols-2 gap-2.5">
+        {/* Total Pendapatan Lunas */}
         <div className="bg-white rounded-2xl p-3 border border-slate-200 shadow-sm">
           <div className="flex items-center justify-between text-slate-500">
             <span className="text-[11px] font-medium">Total Pendapatan</span>
@@ -177,16 +182,56 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </span>
         </div>
 
+        {/* Belum Dibayar (Pending) */}
+        <div
+          onClick={onGoToOrders}
+          className={`bg-white rounded-2xl p-3 border shadow-sm transition ${
+            onGoToOrders ? 'cursor-pointer hover:border-amber-400 active:scale-98' : ''
+          } ${totalUnpaid > 0 ? 'border-amber-300 bg-amber-50/40' : 'border-slate-200'}`}
+        >
+          <div className="flex items-center justify-between text-slate-500">
+            <span className="text-[11px] font-medium text-amber-800">Belum Dibayar</span>
+            <div className="p-1.5 rounded-lg bg-amber-100 text-amber-700">
+              <Clock className="w-3.5 h-3.5" />
+            </div>
+          </div>
+          <p className="text-base font-black text-amber-700 mt-1">{formatRupiah(totalUnpaid)}</p>
+          <span className="text-[10px] text-amber-600 font-semibold mt-0.5 flex items-center justify-between">
+            <span>{unpaidOrders.length} order belum lunas</span>
+            {onGoToOrders && totalUnpaid > 0 && <span className="text-[9px] underline">Lihat →</span>}
+          </span>
+        </div>
+
+        {/* Pelanggan */}
         <div className="bg-white rounded-2xl p-3 border border-slate-200 shadow-sm">
           <div className="flex items-center justify-between text-slate-500">
-            <span className="text-[11px] font-medium">Pelanggan Aktif</span>
+            <span className="text-[11px] font-medium">Pelanggan</span>
             <div className="p-1.5 rounded-lg bg-blue-100 text-blue-700">
               <Users className="w-3.5 h-3.5" />
             </div>
           </div>
           <p className="text-base font-black text-slate-900 mt-1">{customers.length} Orang</p>
           <span className="text-[10px] text-blue-600 font-semibold mt-0.5 block">
-            {activeOrders.length} order sedang proses
+            Terdaftar di sistem
+          </span>
+        </div>
+
+        {/* Pesanan Aktif */}
+        <div
+          onClick={onGoToOrders}
+          className={`bg-white rounded-2xl p-3 border border-slate-200 shadow-sm transition ${
+            onGoToOrders ? 'cursor-pointer hover:border-blue-400 active:scale-98' : ''
+          }`}
+        >
+          <div className="flex items-center justify-between text-slate-500">
+            <span className="text-[11px] font-medium">Pesanan Aktif</span>
+            <div className="p-1.5 rounded-lg bg-indigo-100 text-indigo-700">
+              <ShoppingBag className="w-3.5 h-3.5" />
+            </div>
+          </div>
+          <p className="text-base font-black text-slate-900 mt-1">{activeOrders.length} Order</p>
+          <span className="text-[10px] text-indigo-600 font-semibold mt-0.5 block">
+            Sedang diproses laundry
           </span>
         </div>
       </div>

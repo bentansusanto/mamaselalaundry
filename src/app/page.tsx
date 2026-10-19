@@ -503,6 +503,7 @@ export default function Home() {
             customers={customers}
             services={services}
             onGoToPos={() => setCurrentTab('pos')}
+            onGoToOrders={() => setCurrentTab('orders')}
             onViewReceipt={setActiveReceiptOrder}
           />
         )}
