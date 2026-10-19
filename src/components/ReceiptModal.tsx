@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { Order } from '@/types';
-import { formatRupiah, formatDateTime } from '@/lib/utils';
+import { formatRupiah, formatDateTime, formatWeight } from '@/lib/utils';
 import { Printer, Share2, X, CheckCircle, Clock } from 'lucide-react';
 
 interface ReceiptModalProps {
@@ -41,7 +41,7 @@ Estimasi Selesai: ${formatDateTime(order.estimatedCompletion)}
 
 *Rincian:*
 - Layanan: ${order.mainService}
-- Berat: ${order.actualWeight} kg ${order.billedWeight !== order.actualWeight ? `(Dihitung min 3kg: ${order.billedWeight} kg)` : ''}
+- Berat: ${formatWeight(order.actualWeight)} kg ${order.billedWeight !== order.actualWeight ? `(Dihitung min 3kg: ${formatWeight(order.billedWeight)} kg)` : ''}
 - Kecepatan: ${order.speed} ${order.speedFee > 0 ? `(+${formatRupiah(order.speedFee)})` : ''}${itemsSummary}${roundingSummary}
 
 *Total Tagihan: ${formatRupiah(order.totalPrice)}*
@@ -107,9 +107,9 @@ _Terima kasih telah mempercayakan pakaian Anda kepada kami!_`;
             </div>
             <div className="flex justify-between text-[10px] text-slate-500 pl-2">
               <span>
-                {order.actualWeight} kg x {formatRupiah(order.billedWeight > 0 ? order.mainServiceTotal / order.billedWeight : 0)}
+                {formatWeight(order.actualWeight)} kg x {formatRupiah(order.billedWeight > 0 ? order.mainServiceTotal / order.billedWeight : 0)}
                 {order.billedWeight !== order.actualWeight && (
-                  <span className="text-amber-600"> (Min 3kg: {order.billedWeight} kg)</span>
+                  <span className="text-amber-600"> (Min 3kg: {formatWeight(order.billedWeight)} kg)</span>
                 )}
               </span>
             </div>

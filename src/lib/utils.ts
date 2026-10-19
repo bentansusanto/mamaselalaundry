@@ -15,6 +15,11 @@ export function formatRupiah(value: number): string {
   }).format(value);
 }
 
+export function formatWeight(weight: number): string {
+  if (weight === undefined || weight === null || isNaN(weight)) return '0';
+  return String(weight).replace('.', ',');
+}
+
 export function parseSafeDate(dateStr: string | undefined | null): Date | null {
   if (!dateStr || typeof dateStr !== 'string') return null;
   const trimmed = dateStr.trim();

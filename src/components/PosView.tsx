@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { Customer, Order, OrderItemDetail, PaymentMethod, PaymentStatus, ServiceItem, SpeedType, UserAccount } from '@/types';
-import { calculateBilledWeight, formatRupiah, SPEED_FEES, roundPaymentTotal } from '@/lib/utils';
+import { calculateBilledWeight, formatRupiah, formatWeight, SPEED_FEES, roundPaymentTotal } from '@/lib/utils';
 import { getAllOrders } from '@/lib/db';
 import { User, Scale, Zap, CreditCard, Plus, Minus, Search, Check, AlertCircle, Sparkles, Banknote, QrCode, Flame, Clock } from 'lucide-react';
 
@@ -40,7 +40,19 @@ export const PosView: React.FC<PosViewProps> = ({
 
   const [selectedKiloan, setSelectedKiloan] = useState<ServiceItem | null>(kiloanServices[0] || null);
   const [actualWeight, setActualWeight] = useState<number>(3.0);
+  const [weightInputStr, setWeightInputStr] = useState<string>('3');
   const [satuanQuantities, setSatuanQuantities] = useState<Record<string, number>>({});
+
+  const handleWeightDelta = (delta: number) => {
+    const nextVal = Math.max(0, Math.round((actualWeight + delta) * 10) / 10);
+    setActualWeight(nextVal);
+    setWeightInputStr(nextVal === 0 ? '' : formatWeight(nextVal));
+  };
+
+  const handleQuickWeight = (val: number) => {
+    setActualWeight(val);
+    setWeightInputStr(formatWeight(val));
+  };
 
   // Speed
   const [speed, setSpeed] = useState<SpeedType>('Normal');
@@ -181,6 +193,7 @@ export const PosView: React.FC<PosViewProps> = ({
     setStep(1);
     setSelectedCustomer(null);
     setActualWeight(3.0);
+    setWeightInputStr('3');
     setSatuanQuantities({});
     setSpeed('Normal');
     setPaymentStatus('Lunas');
@@ -406,13 +419,13 @@ export const PosView: React.FC<PosViewProps> = ({
             <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold text-slate-700">Timbangan Berat (Kg):</span>
-                <span className="text-base font-extrabold text-blue-600">{actualWeight} kg</span>
+                <span className="text-base font-extrabold text-blue-600">{formatWeight(actualWeight)} kg</span>
               </div>
 
               {/* Counter buttons */}
               <div className="flex items-center justify-between gap-2">
                 <button
-                  onClick={() => setActualWeight((w) => Math.max(0, Math.round((w - 0.5) * 10) / 10))}
+                  onClick={() => handleWeightDelta(-0.5)}
                   className="w-10 h-10 rounded-xl bg-white border border-slate-300 flex items-center justify-center text-slate-700 active:scale-95"
                 >
                   <Minus className="w-4 h-4" />
@@ -420,19 +433,28 @@ export const PosView: React.FC<PosViewProps> = ({
                 <input
                   type="text"
                   inputMode="decimal"
-                  value={actualWeight === 0 ? '' : actualWeight}
+                  value={weightInputStr}
                   onChange={(e) => {
-                    const val = e.target.value.replace(',', '.');
-                    if (val === '' || /^\d*\.?\d*$/.test(val)) {
-                      const num = parseFloat(val);
+                    const raw = e.target.value;
+                    if (raw === '' || /^\d*[,.]?\d*$/.test(raw)) {
+                      setWeightInputStr(raw);
+                      const normalized = raw.replace(',', '.');
+                      const num = parseFloat(normalized);
                       setActualWeight(isNaN(num) ? 0 : num);
                     }
                   }}
-                  placeholder="0.0"
+                  onBlur={() => {
+                    if (actualWeight > 0) {
+                      setWeightInputStr(formatWeight(actualWeight));
+                    } else {
+                      setWeightInputStr('');
+                    }
+                  }}
+                  placeholder="0,0"
                   className="flex-1 text-center font-bold text-sm py-2 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                 />
                 <button
-                  onClick={() => setActualWeight((w) => Math.round((w + 0.5) * 10) / 10)}
+                  onClick={() => handleWeightDelta(0.5)}
                   className="w-10 h-10 rounded-xl bg-white border border-slate-300 flex items-center justify-center text-slate-700 active:scale-95"
                 >
                   <Plus className="w-4 h-4" />
@@ -444,7 +466,7 @@ export const PosView: React.FC<PosViewProps> = ({
                 {[1, 2, 3, 5, 7].map((w) => (
                   <button
                     key={w}
-                    onClick={() => setActualWeight(w)}
+                    onClick={() => handleQuickWeight(w)}
                     className="px-2 py-0.5 text-[11px] bg-white border border-slate-200 rounded-lg text-slate-600 hover:border-blue-400"
                   >
                     {w} kg
@@ -458,8 +480,8 @@ export const PosView: React.FC<PosViewProps> = ({
                   <AlertCircle className="w-3.5 h-3.5 text-yellow-600 mt-0.5 shrink-0" />
                   <div>
                     <span className="font-bold">Ketentuan Berat Minimum: </span>
-                    Berat {actualWeight} kg dihitung tarif setara minimum{' '}
-                    <span className="font-bold text-yellow-900">3.0 kg</span> (
+                    Berat {formatWeight(actualWeight)} kg dihitung tarif setara minimum{' '}
+                    <span className="font-bold text-yellow-900">3,0 kg</span> (
                     {formatRupiah(3 * kiloanPricePerKg)})
                   </div>
                 </div>
@@ -596,7 +618,7 @@ export const PosView: React.FC<PosViewProps> = ({
           <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-1.5 text-xs">
             <div className="flex justify-between text-slate-600">
               <span>
-                {selectedKiloan?.name} ({billedWeight} kg):
+                {selectedKiloan?.name} ({formatWeight(billedWeight)} kg):
               </span>
               <span>{formatRupiah(mainServiceTotal)}</span>
             </div>

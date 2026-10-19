@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { Order, OrderProgressStatus, PaymentStatus, PaymentMethod } from '@/types';
-import { formatDateTime, formatRupiah } from '@/lib/utils';
+import { formatDateTime, formatRupiah, formatWeight } from '@/lib/utils';
 import { 
   Search, 
   Package, 
@@ -202,8 +202,8 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
                     <p className="text-[11px] text-slate-600 mt-1">
                       {order.mainService} •{' '}
                       <span className="font-semibold text-slate-800">
-                        {order.actualWeight} kg
-                        {order.billedWeight !== order.actualWeight && ` (Min 3kg: ${order.billedWeight} kg)`}
+                        {formatWeight(order.actualWeight)} kg
+                        {order.billedWeight !== order.actualWeight && ` (Min 3kg: ${formatWeight(order.billedWeight)} kg)`}
                       </span>
                       {(order.items || []).length > 0 && ` + ${(order.items || []).length} item satuan`}
                     </p>
@@ -331,7 +331,7 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
                 <div className="flex justify-between text-[11px]">
                   <span className="text-slate-500">Layanan:</span>
                   <span className="text-slate-700">
-                    {paymentModalOrder.mainService} ({paymentModalOrder.actualWeight} kg)
+                    {paymentModalOrder.mainService} ({formatWeight(paymentModalOrder.actualWeight)} kg)
                   </span>
                 </div>
               </div>
