@@ -418,11 +418,16 @@ export const PosView: React.FC<PosViewProps> = ({
                   <Minus className="w-4 h-4" />
                 </button>
                 <input
-                  type="number"
-                  step="0.1"
-                  min="0"
+                  type="text"
+                  inputMode="decimal"
                   value={actualWeight === 0 ? '' : actualWeight}
-                  onChange={(e) => setActualWeight(parseFloat(e.target.value) || 0)}
+                  onChange={(e) => {
+                    const val = e.target.value.replace(',', '.');
+                    if (val === '' || /^\d*\.?\d*$/.test(val)) {
+                      const num = parseFloat(val);
+                      setActualWeight(isNaN(num) ? 0 : num);
+                    }
+                  }}
                   placeholder="0.0"
                   className="flex-1 text-center font-bold text-sm py-2 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                 />
