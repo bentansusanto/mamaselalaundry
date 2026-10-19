@@ -113,21 +113,6 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
               );
             })}
           </div>
-
-          {onClearAllOrders && orders.length > 0 && (
-            <button
-              onClick={() => {
-                if (confirm('Yakin ingin menghapus SEMUA data pesanan? Data akan dikosongkan.')) {
-                  onClearAllOrders();
-                }
-              }}
-              className="text-[10px] text-red-600 hover:text-red-700 font-semibold flex items-center gap-1 px-2 py-1 rounded-lg border border-red-200 bg-red-50 hover:bg-red-100 transition shrink-0 active:scale-95"
-              title="Hapus semua pesanan"
-            >
-              <Trash2 className="w-3 h-3 text-red-500" />
-              <span>Hapus Semua</span>
-            </button>
-          )}
         </div>
       </div>
 
