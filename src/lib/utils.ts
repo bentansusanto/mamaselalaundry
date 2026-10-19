@@ -99,3 +99,21 @@ export function calculateProfitMargin(price: number, hpp: number): number {
   const margin = ((price - hpp) / price) * 100;
   return Math.round(margin * 10) / 10;
 }
+
+/**
+ * Aturan Pembulatan Total Bayar:
+ * - Jika total bayar memiliki pecahan rupiah (mod 1000) >= 50 (contoh: Rp 45.100, Rp 45.600, Rp 45.050),
+ *   maka dibulatkan ke atas menjadi ribuan berikutnya (contoh: 46.000).
+ * - Jika kurang dari 45.050 / pecahan < 50 (contoh: Rp 45.000, Rp 45.040, dll),
+ *   maka dibulatkan ke bawah (contoh: 45.000).
+ */
+export function roundPaymentTotal(amount: number): number {
+  if (amount <= 0) return 0;
+  const roundedAmount = Math.round(amount);
+  const remainder = roundedAmount % 1000;
+  if (remainder >= 50) {
+    return roundedAmount - remainder + 1000;
+  }
+  return roundedAmount - remainder;
+}
+

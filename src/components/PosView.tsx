@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { Customer, Order, OrderItemDetail, PaymentMethod, PaymentStatus, ServiceItem, SpeedType, UserAccount } from '@/types';
-import { calculateBilledWeight, formatRupiah, SPEED_FEES } from '@/lib/utils';
+import { calculateBilledWeight, formatRupiah, SPEED_FEES, roundPaymentTotal } from '@/lib/utils';
 import { getAllOrders } from '@/lib/db';
 import { User, Scale, Zap, CreditCard, Plus, Minus, Search, Check, AlertCircle, Sparkles, Banknote, QrCode, Flame, Clock } from 'lucide-react';
 
@@ -34,7 +34,7 @@ export const PosView: React.FC<PosViewProps> = ({
   const [newCustPhone, setNewCustPhone] = useState('');
   const [newCustAddress, setNewCustAddress] = useState('');
 
-  // Service selections
+  // Service Selection
   const kiloanServices = services.filter((s) => s.category === 'Kiloan');
   const satuanServices = services.filter((s) => s.category === 'Satuan');
 
@@ -76,7 +76,9 @@ export const PosView: React.FC<PosViewProps> = ({
 
   const itemsTotal = satuanItems.reduce((acc, curr) => acc + curr.total, 0);
   const speedFee = SPEED_FEES[speed];
-  const grandTotal = mainServiceTotal + itemsTotal + speedFee;
+  const rawGrandTotal = mainServiceTotal + itemsTotal + speedFee;
+  const grandTotal = roundPaymentTotal(rawGrandTotal);
+  const roundingAdjustment = grandTotal - rawGrandTotal;
 
   const filteredCustomers = customers.filter(
     (c) =>
@@ -605,6 +607,14 @@ export const PosView: React.FC<PosViewProps> = ({
               <span>Kecepatan ({speed}):</span>
               <span>{speedFee > 0 ? formatRupiah(speedFee) : 'Standar (+Rp 0)'}</span>
             </div>
+            {roundingAdjustment !== 0 && (
+              <div className="flex justify-between text-slate-500 text-[11px]">
+                <span>Pembulatan:</span>
+                <span className={roundingAdjustment > 0 ? 'text-blue-600 font-semibold' : 'text-slate-600 font-semibold'}>
+                  {roundingAdjustment > 0 ? `+${formatRupiah(roundingAdjustment)}` : formatRupiah(roundingAdjustment)}
+                </span>
+              </div>
+            )}
             <div className="border-t border-slate-300 pt-1.5 flex justify-between font-extrabold text-sm text-slate-900">
               <span>Total Tagihan:</span>
               <span className="text-blue-600">{formatRupiah(grandTotal)}</span>

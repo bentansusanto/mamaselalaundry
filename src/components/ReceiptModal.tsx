@@ -27,6 +27,12 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ order, onClose }) =>
       ? `\n*Item Satuan:*\n` + order.items.map(i => `- ${i.name} (${i.qty}x): ${formatRupiah(i.total)}`).join('\n')
       : '';
 
+    const subtotal = (order.mainServiceTotal || 0) + (order.itemsTotal || 0) + (order.speedFee || 0);
+    const roundingDiff = (order.totalPrice || 0) - subtotal;
+    const roundingSummary = roundingDiff !== 0
+      ? `\n- Pembulatan: ${roundingDiff > 0 ? `+${formatRupiah(roundingDiff)}` : formatRupiah(roundingDiff)}`
+      : '';
+
     const text = `*NOTA LAUNDRY - MAMA SELA*
 No. Order: *#${order.id}*
 Pelanggan: ${order.customerName}
@@ -36,7 +42,7 @@ Estimasi Selesai: ${formatDateTime(order.estimatedCompletion)}
 *Rincian:*
 - Layanan: ${order.mainService}
 - Berat: ${order.actualWeight} kg ${order.billedWeight !== order.actualWeight ? `(Dihitung min 3kg: ${order.billedWeight} kg)` : ''}
-- Kecepatan: ${order.speed} ${order.speedFee > 0 ? `(+${formatRupiah(order.speedFee)})` : ''}${itemsSummary}
+- Kecepatan: ${order.speed} ${order.speedFee > 0 ? `(+${formatRupiah(order.speedFee)})` : ''}${itemsSummary}${roundingSummary}
 
 *Total Tagihan: ${formatRupiah(order.totalPrice)}*
 Status Pembayaran: *${order.paymentStatus}* (${order.paymentMethod})
@@ -123,6 +129,18 @@ _Terima kasih telah mempercayakan pakaian Anda kepada kami!_`;
               <span>Kecepatan: {order.speed}</span>
               <span>{order.speedFee > 0 ? formatRupiah(order.speedFee) : 'Rp 0'}</span>
             </div>
+
+            {/* Pembulatan if any */}
+            {order.totalPrice !== ((order.mainServiceTotal || 0) + (order.itemsTotal || 0) + (order.speedFee || 0)) && (
+              <div className="flex justify-between text-[11px] text-slate-500">
+                <span>Pembulatan:</span>
+                <span>
+                  {order.totalPrice - ((order.mainServiceTotal || 0) + (order.itemsTotal || 0) + (order.speedFee || 0)) > 0
+                    ? `+${formatRupiah(order.totalPrice - ((order.mainServiceTotal || 0) + (order.itemsTotal || 0) + (order.speedFee || 0)))}`
+                    : formatRupiah(order.totalPrice - ((order.mainServiceTotal || 0) + (order.itemsTotal || 0) + (order.speedFee || 0)))}
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Total & Payment */}
