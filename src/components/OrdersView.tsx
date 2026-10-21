@@ -228,8 +228,8 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
                       Struk
                     </button>
 
-                    {/* Delete Order */}
-                    {onDeleteOrder && (
+                    {/* Delete Order (hanya jika belum selesai) */}
+                    {onDeleteOrder && order.progressStatus !== 'Selesai' && (
                       <button
                         onClick={() => {
                           if (confirm(`Hapus pesanan #${order.id} (${order.customerName})?`)) {
