@@ -23,15 +23,32 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ order, onClose }) =>
       cleanPhone = '62' + cleanPhone.slice(1);
     }
 
-    const itemsSummary = order.items.length > 0
-      ? `\n*Item Satuan:*\n` + order.items.map(i => `- ${i.name} (${i.qty}x): ${formatRupiah(i.total)}`).join('\n')
-      : '';
+    const kiloanLine =
+      order.actualWeight > 0
+        ? `- Layanan Kiloan: ${order.mainService} (${formatWeight(order.actualWeight)} kg${
+            order.billedWeight !== order.actualWeight
+              ? `, dihitung min 3kg: ${formatWeight(order.billedWeight)} kg`
+              : ''
+          }): ${formatRupiah(order.mainServiceTotal)}\n`
+        : '';
+
+    const itemsSummary =
+      (order.items || []).length > 0
+        ? `*Layanan Satuan:*\n` +
+          (order.items || [])
+            .map((i) => `- ${i.name} (${i.qty}x): ${formatRupiah(i.total)}`)
+            .join('\n') +
+          '\n'
+        : '';
 
     const subtotal = (order.mainServiceTotal || 0) + (order.itemsTotal || 0) + (order.speedFee || 0);
     const roundingDiff = (order.totalPrice || 0) - subtotal;
-    const roundingSummary = roundingDiff !== 0
-      ? `\n- Pembulatan: ${roundingDiff > 0 ? `+${formatRupiah(roundingDiff)}` : formatRupiah(roundingDiff)}`
-      : '';
+    const roundingSummary =
+      roundingDiff !== 0
+        ? `- Pembulatan: ${
+            roundingDiff > 0 ? `+${formatRupiah(roundingDiff)}` : formatRupiah(roundingDiff)
+          }\n`
+        : '';
 
     const text = `*NOTA LAUNDRY - MAMA SELA*
 Bida Asri 1 blok D1 no 12, Batam Center
@@ -41,10 +58,10 @@ Tanggal Masuk: ${formatDateTime(order.createdAt)}
 Estimasi Selesai: ${formatDateTime(order.estimatedCompletion)}
 
 *Rincian:*
-- Layanan: ${order.mainService}
-- Berat: ${formatWeight(order.actualWeight)} kg ${order.billedWeight !== order.actualWeight ? `(Dihitung min 3kg: ${formatWeight(order.billedWeight)} kg)` : ''}
-- Kecepatan: ${order.speed} ${order.speedFee > 0 ? `(+${formatRupiah(order.speedFee)})` : ''}${itemsSummary}${roundingSummary}
-
+${kiloanLine}${itemsSummary}- Kecepatan: ${order.speed} ${
+      order.speedFee > 0 ? `(+${formatRupiah(order.speedFee)})` : ''
+    }
+${roundingSummary}
 *Total Tagihan: ${formatRupiah(order.totalPrice)}*
 Status Pembayaran: *${order.paymentStatus}* (${order.paymentMethod})
 Status Pengerjaan: *${order.progressStatus}*
@@ -102,26 +119,36 @@ _Terima kasih telah mempercayakan pakaian Anda kepada kami!_`;
 
           {/* Service Items */}
           <div className="space-y-1.5 border-b border-dashed border-slate-300 pb-2">
-            <div className="flex justify-between font-bold">
-              <span>{order.mainService}</span>
-              <span>{formatRupiah(order.mainServiceTotal)}</span>
-            </div>
-            <div className="flex justify-between text-[10px] text-slate-500 pl-2">
-              <span>
-                {formatWeight(order.actualWeight)} kg x {formatRupiah(order.billedWeight > 0 ? order.mainServiceTotal / order.billedWeight : 0)}
-                {order.billedWeight !== order.actualWeight && (
-                  <span className="text-amber-600"> (Min 3kg: {formatWeight(order.billedWeight)} kg)</span>
-                )}
-              </span>
-            </div>
+            {order.actualWeight > 0 && (
+              <>
+                <div className="flex justify-between font-bold">
+                  <span>{order.mainService}</span>
+                  <span>{formatRupiah(order.mainServiceTotal)}</span>
+                </div>
+                <div className="flex justify-between text-[10px] text-slate-500 pl-2">
+                  <span>
+                    {formatWeight(order.actualWeight)} kg x{' '}
+                    {formatRupiah(order.billedWeight > 0 ? order.mainServiceTotal / order.billedWeight : 0)}
+                    {order.billedWeight !== order.actualWeight && (
+                      <span className="text-amber-600">
+                        {' '}
+                        (Min 3kg: {formatWeight(order.billedWeight)} kg)
+                      </span>
+                    )}
+                  </span>
+                </div>
+              </>
+            )}
 
             {/* Satuan Items */}
-            {order.items.map((item, idx) => (
+            {(order.items || []).map((item, idx) => (
               <div key={idx} className="flex justify-between text-[11px]">
-                <span>
+                <span className={order.actualWeight <= 0 ? 'font-bold' : ''}>
                   {item.name} x{item.qty}
                 </span>
-                <span>{formatRupiah(item.total)}</span>
+                <span className={order.actualWeight <= 0 ? 'font-bold' : ''}>
+                  {formatRupiah(item.total)}
+                </span>
               </div>
             ))}
 

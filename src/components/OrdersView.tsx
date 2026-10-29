@@ -215,15 +215,31 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
                       </p>
                     )}
                     <p className="text-xs text-slate-700 font-medium pt-0.5">
-                      {order.mainService} •{' '}
-                      <span className="font-bold text-slate-900">
-                        {formatWeight(order.actualWeight)} kg
-                        {order.billedWeight !== order.actualWeight &&
-                          ` (Min 3kg: ${formatWeight(order.billedWeight)} kg)`}
-                      </span>
-                      {(order.items || []).length > 0 &&
-                        ` + ${(order.items || []).length} item satuan`}
+                      {order.actualWeight > 0 ? (
+                        <>
+                          {order.mainService} •{' '}
+                          <span className="font-bold text-slate-900">
+                            {formatWeight(order.actualWeight)} kg
+                            {order.billedWeight !== order.actualWeight &&
+                              ` (Min 3kg: ${formatWeight(order.billedWeight)} kg)`}
+                          </span>
+                        </>
+                      ) : (
+                        <span className="font-bold text-slate-900">{order.mainService}</span>
+                      )}
                     </p>
+                    {(order.items || []).length > 0 && (
+                      <div className="flex flex-wrap gap-1 pt-0.5">
+                        {(order.items || []).map((itm, idx) => (
+                          <span
+                            key={idx}
+                            className="inline-flex items-center px-2 py-0.5 rounded-md bg-blue-50 text-blue-800 border border-blue-200/70 text-[10px] font-bold"
+                          >
+                            {itm.name} ×{itm.qty}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
                   <div className="text-right shrink-0">
@@ -367,10 +383,22 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
                 )}
                 <div className="flex justify-between text-[11px]">
                   <span className="text-slate-500">Layanan:</span>
-                  <span className="text-slate-700">
-                    {paymentModalOrder.mainService} ({formatWeight(paymentModalOrder.actualWeight)} kg)
+                  <span className="text-slate-700 text-right font-medium">
+                    {paymentModalOrder.actualWeight > 0
+                      ? `${paymentModalOrder.mainService} (${formatWeight(paymentModalOrder.actualWeight)} kg)`
+                      : paymentModalOrder.mainService}
                   </span>
                 </div>
+                {(paymentModalOrder.items || []).length > 0 && (
+                  <div className="flex justify-between text-[11px] gap-2">
+                    <span className="text-slate-500 shrink-0">Item Satuan:</span>
+                    <span className="text-slate-700 text-right font-medium">
+                      {(paymentModalOrder.items || [])
+                        .map((i) => `${i.name} ×${i.qty}`)
+                        .join(', ')}
+                    </span>
+                  </div>
+                )}
               </div>
 
               {/* Tagihan Card */}

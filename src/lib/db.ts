@@ -160,6 +160,72 @@ export async function initDatabaseDefaults() {
     }
   }
 
+  // Fifth migration: restore missing default Kiloan & Satuan services and rescue any collided custom services
+  const isServicesRestoredV5 = await db.get('settings', 'restore_services_v5');
+  if (!isServicesRestoredV5) {
+    const existingServices = await db.getAll('services');
+    const deletedIds: string[] = (await db.get('settings', 'deleted_service_ids')) || [];
+
+    // Find max numeric ID across INITIAL_SERVICES and existingServices
+    let maxNum = INITIAL_SERVICES.length;
+    for (const s of existingServices) {
+      const m = s.id.match(/^SRV-(\d+)/i);
+      if (m) {
+        const n = parseInt(m[1], 10);
+        if (!isNaN(n) && n > maxNum) maxNum = n;
+      }
+    }
+
+    const txS = db.transaction('services', 'readwrite');
+
+    // If any custom service accidentally got an ID in SRV-01..SRV-09 (due to previous length+1 bug),
+    // move that custom service to a new SRV-XX ID so neither custom nor default service is lost
+    for (const existing of existingServices) {
+      const defaultMatch = INITIAL_SERVICES.find((d) => d.id === existing.id);
+      if (
+        defaultMatch &&
+        (existing.name.toLowerCase().trim() !== defaultMatch.name.toLowerCase().trim() ||
+          existing.category !== defaultMatch.category)
+      ) {
+        maxNum += 1;
+        const rescuedService: ServiceItem = {
+          ...existing,
+          id: `SRV-${String(maxNum).padStart(2, '0')}`,
+        };
+        await txS.store.put(rescuedService);
+      }
+    }
+
+    // Ensure all INITIAL_SERVICES (Kiloan & Satuan) exist unless explicitly deleted
+    for (const defItem of INITIAL_SERVICES) {
+      if (!deletedIds.includes(defItem.id)) {
+        const current = await txS.store.get(defItem.id);
+        if (
+          !current ||
+          current.name.toLowerCase().trim() !== defItem.name.toLowerCase().trim() ||
+          current.category !== defItem.category
+        ) {
+          await txS.store.put(defItem);
+        }
+      }
+    }
+    await txS.done;
+    await db.put('settings', true, 'restore_services_v5');
+  }
+
+  // Safety check: if services store is ever completely empty (or missing an entire category when not deleted), re-seed defaults
+  const currentServices = await db.getAll('services');
+  const deletedServiceIds: string[] = (await db.get('settings', 'deleted_service_ids')) || [];
+  if (currentServices.length === 0) {
+    const txS = db.transaction('services', 'readwrite');
+    for (const item of INITIAL_SERVICES) {
+      if (!deletedServiceIds.includes(item.id)) {
+        await txS.store.put(item);
+      }
+    }
+    await txS.done;
+  }
+
   // Ensure current user is synced to single user Mama Sela
   const currentUsers = await db.getAll('users');
   if (
@@ -175,6 +241,12 @@ export async function initDatabaseDefaults() {
   }
 }
 
+export async function getDeletedServiceIds(): Promise<string[]> {
+  const db = await getDB();
+  if (!db) return [];
+  return (await db.get('settings', 'deleted_service_ids')) || [];
+}
+
 // Helper CRUD operations
 export async function getAllOrders(): Promise<Order[]> {
   const db = await getDB();
@@ -185,26 +257,43 @@ export async function getAllOrders(): Promise<Order[]> {
       o.createdAt = new Date().toISOString();
       await db.put('orders', o);
     }
+    if (!Array.isArray(o.items)) {
+      if (typeof o.items === 'string') {
+        try {
+          o.items = JSON.parse(o.items);
+        } catch {
+          o.items = [];
+        }
+      } else {
+        o.items = [];
+      }
+    }
   }
   return orders.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 }
 
-export async function saveOrder(order: Order): Promise<void> {
+export async function saveOrder(order: Order, skipQueue = false): Promise<void> {
   const db = await getDB();
   if (!db) return;
   if (!order.createdAt || order.createdAt === 'Invalid Date') {
     order.createdAt = new Date().toISOString();
   }
+  if (!Array.isArray(order.items)) {
+    order.items = [];
+  }
   await db.put('orders', order);
-  // add to sync queue
-  await queueSync('orders', 'update', order);
+  if (!skipQueue) {
+    await queueSync('orders', 'update', order);
+  }
 }
 
-export async function deleteOrder(id: string): Promise<void> {
+export async function deleteOrder(id: string, skipQueue = false): Promise<void> {
   const db = await getDB();
   if (!db) return;
   await db.delete('orders', id);
-  await queueSync('orders', 'delete', { id });
+  if (!skipQueue) {
+    await queueSync('orders', 'delete', { id });
+  }
 }
 
 export async function getAllCustomers(): Promise<Customer[]> {
@@ -220,41 +309,63 @@ export async function getAllCustomers(): Promise<Customer[]> {
   return list;
 }
 
-export async function saveCustomer(customer: Customer): Promise<void> {
+export async function saveCustomer(customer: Customer, skipQueue = false): Promise<void> {
   const db = await getDB();
   if (!db) return;
   if (!customer.createdAt || customer.createdAt === 'Invalid Date') {
     customer.createdAt = new Date().toISOString();
   }
   await db.put('customers', customer);
-  await queueSync('customers', 'update', customer);
+  if (!skipQueue) {
+    await queueSync('customers', 'update', customer);
+  }
 }
 
-export async function deleteCustomer(id: string): Promise<void> {
+export async function deleteCustomer(id: string, skipQueue = false): Promise<void> {
   const db = await getDB();
   if (!db) return;
   await db.delete('customers', id);
-  await queueSync('customers', 'delete', { id });
+  if (!skipQueue) {
+    await queueSync('customers', 'delete', { id });
+  }
 }
 
 export async function getAllServices(): Promise<ServiceItem[]> {
   const db = await getDB();
-  if (!db) return [];
-  return await db.getAll('services');
+  if (!db) return INITIAL_SERVICES;
+  const list = await db.getAll('services');
+  return list.sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true }));
 }
 
-export async function saveService(service: ServiceItem): Promise<void> {
+export async function saveService(service: ServiceItem, skipQueue = false): Promise<void> {
   const db = await getDB();
   if (!db) return;
   await db.put('services', service);
-  await queueSync('services', 'update', service);
+  const deletedIds: string[] = (await db.get('settings', 'deleted_service_ids')) || [];
+  if (deletedIds.includes(service.id)) {
+    await db.put(
+      'settings',
+      deletedIds.filter((id) => id !== service.id),
+      'deleted_service_ids'
+    );
+  }
+  if (!skipQueue) {
+    await queueSync('services', 'update', service);
+  }
 }
 
-export async function deleteService(id: string): Promise<void> {
+export async function deleteService(id: string, skipQueue = false): Promise<void> {
   const db = await getDB();
   if (!db) return;
   await db.delete('services', id);
-  await queueSync('services', 'delete', { id });
+  const deletedIds: string[] = (await db.get('settings', 'deleted_service_ids')) || [];
+  if (!deletedIds.includes(id)) {
+    deletedIds.push(id);
+    await db.put('settings', deletedIds, 'deleted_service_ids');
+  }
+  if (!skipQueue) {
+    await queueSync('services', 'delete', { id });
+  }
 }
 
 export async function getAllUsers(): Promise<UserAccount[]> {

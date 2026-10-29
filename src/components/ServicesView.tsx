@@ -38,11 +38,12 @@ export const ServicesView: React.FC<ServicesViewProps> = ({
   const handleOpenAdd = () => {
     setEditingService(null);
     setName('');
-    setCategory('Kiloan');
+    const defaultCat: ServiceCategory = activeCategory === 'Satuan' ? 'Satuan' : 'Kiloan';
+    setCategory(defaultCat);
     setVariant('');
-    setUnit('kg');
-    setPrice(6000);
-    setHpp(2500);
+    setUnit(defaultCat === 'Kiloan' ? 'kg' : 'pcs');
+    setPrice(defaultCat === 'Kiloan' ? 6000 : 15000);
+    setHpp(defaultCat === 'Kiloan' ? 2500 : 5000);
     setIsModalOpen(true);
   };
 
@@ -63,44 +64,84 @@ export const ServicesView: React.FC<ServicesViewProps> = ({
       return;
     }
 
+    // Generate a guaranteed unique ID based on highest existing numeric suffix (minimum 9 for SRV-01..SRV-09)
+    let nextId = editingService?.id;
+    if (!nextId) {
+      let maxNum = 9;
+      const existingIds = new Set(services.map((s) => s.id));
+      for (const s of services) {
+        const m = String(s.id || '').match(/^SRV-(\d+)$/i);
+        if (m) {
+          const n = parseInt(m[1], 10);
+          if (!isNaN(n) && n > maxNum) maxNum = n;
+        }
+      }
+      let candidateNum = maxNum + 1;
+      nextId = `SRV-${String(candidateNum).padStart(2, '0')}`;
+      while (existingIds.has(nextId)) {
+        candidateNum++;
+        nextId = `SRV-${String(candidateNum).padStart(2, '0')}`;
+      }
+    }
+
     const item: ServiceItem = {
-      id: editingService ? editingService.id : `SRV-${String(services.length + 1).padStart(2, '0')}`,
+      id: nextId,
       name: name.trim(),
       category,
       variant: (variant as VariantSize) || undefined,
-      unit,
+      unit: category === 'Kiloan' ? 'kg' : 'pcs',
       price,
       hpp,
       profitMarginPercent,
     };
 
     onSaveService(item);
+    // Ensure the user can immediately see the saved service if they were on another filter tab
+    if (activeCategory !== 'Semua' && activeCategory !== category) {
+      setActiveCategory('Semua');
+    }
     setIsModalOpen(false);
   };
 
   return (
     <div className="space-y-3">
       {/* Category filter & Add button */}
-      <div className="bg-white rounded-2xl p-3 border border-slate-200 shadow-sm flex items-center justify-between">
-        <div className="flex gap-1.5">
-          {(['Semua', 'Kiloan', 'Satuan'] as const).map((cat) => (
-            <button
-              key={cat}
-              onClick={() => setActiveCategory(cat)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition ${
-                activeCategory === cat
-                  ? 'bg-blue-600 text-white shadow-sm shadow-blue-500/20'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              }`}
-            >
-              {cat}
-            </button>
-          ))}
+      <div className="bg-white rounded-2xl p-3 border border-slate-200 shadow-sm flex items-center justify-between gap-2">
+        <div className="flex gap-1.5 flex-wrap">
+          {(['Semua', 'Kiloan', 'Satuan'] as const).map((cat) => {
+            const count =
+              cat === 'Semua'
+                ? services.length
+                : services.filter((s) => s.category === cat).length;
+            const isActive = activeCategory === cat;
+            return (
+              <button
+                key={cat}
+                type="button"
+                onClick={() => setActiveCategory(cat)}
+                className={`min-h-[38px] px-3 py-1.5 rounded-xl text-xs font-bold transition inline-flex items-center gap-1.5 ${
+                  isActive
+                    ? 'bg-blue-600 text-white shadow-sm shadow-blue-500/20'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                <span>{cat}</span>
+                <span
+                  className={`px-1.5 py-0.5 rounded-full text-[10px] leading-none font-extrabold ${
+                    isActive ? 'bg-white/25 text-white' : 'bg-slate-200/80 text-slate-700'
+                  }`}
+                >
+                  {count}
+                </span>
+              </button>
+            );
+          })}
         </div>
 
         <button
+          type="button"
           onClick={handleOpenAdd}
-          className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white font-bold text-xs rounded-xl hover:bg-blue-700 transition active:scale-95 shadow-sm shadow-blue-500/20"
+          className="min-h-[38px] flex items-center gap-1 px-3.5 py-1.5 bg-blue-600 text-white font-bold text-xs rounded-xl hover:bg-blue-700 transition active:scale-95 shadow-sm shadow-blue-500/20 shrink-0"
         >
           <Plus className="w-3.5 h-3.5" />
           Tambah

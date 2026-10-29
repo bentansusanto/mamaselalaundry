@@ -298,15 +298,14 @@ export default function Home() {
     await saveOrder(order);
     const updated = await getAllOrders();
     setOrders(updated);
+    setActiveReceiptOrder(order);
 
     if (isOnline) {
-      syncOrderToSupabase(order);
+      await syncOrderToSupabase(order);
       showNotice(`Order #${order.id} berhasil dibuat!`, 'success');
     } else {
       showNotice(`Order #${order.id} tersimpan di memori perangkat (Offline). Akan otomatis disinkronkan saat online.`, 'warning');
     }
-
-    setActiveReceiptOrder(order);
   };
 
   const handleUpdateOrderStatus = async (orderId: string, nextStatus: OrderProgressStatus) => {
@@ -318,12 +317,12 @@ export default function Home() {
       completedAt: nextStatus === 'Selesai' ? new Date().toISOString() : order.completedAt,
     };
     await saveOrder(updatedOrder);
-    if (isOnline) {
-      syncOrderToSupabase(updatedOrder);
-    }
     const updated = await getAllOrders();
     setOrders(updated);
     showNotice(`Status pesanan diperbarui: ${nextStatus}`, 'success');
+    if (isOnline) {
+      await syncOrderToSupabase(updatedOrder);
+    }
   };
 
   const handleUpdatePaymentStatus = async (
@@ -341,9 +340,6 @@ export default function Home() {
       paymentDate: paymentStatus === 'Lunas' ? new Date().toISOString() : undefined,
     };
     await saveOrder(updatedOrder);
-    if (isOnline) {
-      syncOrderToSupabase(updatedOrder);
-    }
     const updated = await getAllOrders();
     setOrders(updated);
     showNotice(
@@ -352,16 +348,19 @@ export default function Home() {
         : `Status pembayaran #${order.id}: Belum Bayar`,
       'success'
     );
+    if (isOnline) {
+      await syncOrderToSupabase(updatedOrder);
+    }
   };
 
   const handleDeleteOrder = async (orderId: string) => {
     await deleteOrder(orderId);
-    if (isOnline) {
-      deleteOrderFromSupabase(orderId);
-    }
     const updated = await getAllOrders();
     setOrders(updated);
     showNotice(`Pesanan #${orderId} berhasil dihapus!`, 'warning');
+    if (isOnline) {
+      await deleteOrderFromSupabase(orderId);
+    }
   };
 
   const handleClearAllOrders = async () => {
@@ -389,46 +388,46 @@ export default function Home() {
   // Customer Handlers
   const handleSaveCustomer = async (cust: Customer) => {
     await saveCustomer(cust);
+    const updated = await getAllCustomers();
+    setCustomers(updated);
     if (isOnline) {
-      syncCustomerToSupabase(cust);
+      await syncCustomerToSupabase(cust);
       showNotice(`Pelanggan ${cust.name} tersimpan!`, 'success');
     } else {
       showNotice(`Pelanggan ${cust.name} tersimpan di memori perangkat (Offline).`, 'warning');
     }
-    const updated = await getAllCustomers();
-    setCustomers(updated);
   };
 
   const handleDeleteCustomer = async (id: string) => {
     const cust = customers.find((c) => c.id === id);
     await deleteCustomer(id);
-    if (isOnline) {
-      deleteCustomerFromSupabase(id);
-    }
     const updated = await getAllCustomers();
     setCustomers(updated);
     showNotice(`Pelanggan ${cust ? cust.name : ''} berhasil dihapus!`, 'warning');
+    if (isOnline) {
+      await deleteCustomerFromSupabase(id);
+    }
   };
 
   // Service Handlers
   const handleSaveService = async (service: ServiceItem) => {
     await saveService(service);
-    if (isOnline) {
-      syncServiceToSupabase(service);
-    }
     const updated = await getAllServices();
     setServices(updated);
-    showNotice(`Layanan ${service.name} tersimpan!`, 'success');
+    showNotice(`Layanan ${service.name} (${service.category}) tersimpan!`, 'success');
+    if (isOnline) {
+      await syncServiceToSupabase(service);
+    }
   };
 
   const handleDeleteService = async (id: string) => {
     await deleteService(id);
-    if (isOnline) {
-      deleteServiceFromSupabase(id);
-    }
     const updated = await getAllServices();
     setServices(updated);
     showNotice('Layanan berhasil dihapus', 'warning');
+    if (isOnline) {
+      await deleteServiceFromSupabase(id);
+    }
   };
 
   // User Handlers

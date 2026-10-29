@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Customer, Order, OrderItemDetail, PaymentMethod, PaymentStatus, ServiceItem, SpeedType, UserAccount } from '@/types';
 import { calculateBilledWeight, formatRupiah, formatWeight, SPEED_FEES, roundPaymentTotal } from '@/lib/utils';
 import { getAllOrders } from '@/lib/db';
@@ -43,15 +43,50 @@ export const PosView: React.FC<PosViewProps> = ({
   const [weightInputStr, setWeightInputStr] = useState<string>('3');
   const [satuanQuantities, setSatuanQuantities] = useState<Record<string, number>>({});
 
+  // Keep selectedKiloan synchronized when services load or update asynchronously
+  useEffect(() => {
+    if (kiloanServices.length === 0) return;
+    if (!selectedKiloan) {
+      setSelectedKiloan(kiloanServices[0]);
+      return;
+    }
+    const updatedMatch = kiloanServices.find((s) => s.id === selectedKiloan.id);
+    if (updatedMatch) {
+      if (
+        updatedMatch.name !== selectedKiloan.name ||
+        updatedMatch.price !== selectedKiloan.price ||
+        updatedMatch.variant !== selectedKiloan.variant
+      ) {
+        setSelectedKiloan(updatedMatch);
+      }
+    } else {
+      setSelectedKiloan(kiloanServices[0]);
+    }
+  }, [services]);
+
+  const handleSelectKiloanService = (srv: ServiceItem) => {
+    setSelectedKiloan(srv);
+    if (actualWeight <= 0) {
+      setActualWeight(3.0);
+      setWeightInputStr('3');
+    }
+  };
+
   const handleWeightDelta = (delta: number) => {
     const nextVal = Math.max(0, Math.round((actualWeight + delta) * 10) / 10);
     setActualWeight(nextVal);
     setWeightInputStr(nextVal === 0 ? '' : formatWeight(nextVal));
+    if (nextVal > 0 && !selectedKiloan && kiloanServices.length > 0) {
+      setSelectedKiloan(kiloanServices[0]);
+    }
   };
 
   const handleQuickWeight = (val: number) => {
     setActualWeight(val);
-    setWeightInputStr(formatWeight(val));
+    setWeightInputStr(val === 0 ? '' : formatWeight(val));
+    if (val > 0 && !selectedKiloan && kiloanServices.length > 0) {
+      setSelectedKiloan(kiloanServices[0]);
+    }
   };
 
   // Speed
@@ -395,18 +430,22 @@ export const PosView: React.FC<PosViewProps> = ({
             {/* Service selector */}
             <div className="grid grid-cols-3 gap-2">
               {kiloanServices.map((srv) => {
-                const isSelected = selectedKiloan?.id === srv.id;
+                const isSelected = actualWeight > 0 && selectedKiloan?.id === srv.id;
                 return (
                   <button
                     key={srv.id}
-                    onClick={() => setSelectedKiloan(srv)}
+                    type="button"
+                    onClick={() => handleSelectKiloanService(srv)}
                     className={`p-2 rounded-xl border text-center transition flex flex-col items-center justify-center ${
                       isSelected
-                        ? 'border-blue-600 bg-blue-50 text-blue-900 font-bold'
+                        ? 'border-blue-600 bg-blue-50 text-blue-900 font-bold ring-2 ring-blue-500/15'
                         : 'border-slate-200 text-slate-600 hover:bg-slate-50'
                     }`}
                   >
-                    <span className="text-[11px] leading-tight">{srv.name}</span>
+                    <span className="text-[11px] leading-tight">
+                      {srv.name}
+                      {srv.variant ? ` (${srv.variant})` : ''}
+                    </span>
                     <span className="text-[10px] text-blue-600 font-semibold mt-1">
                       {formatRupiah(srv.price)}/kg
                     </span>
@@ -425,6 +464,7 @@ export const PosView: React.FC<PosViewProps> = ({
               {/* Counter buttons */}
               <div className="flex items-center justify-between gap-2">
                 <button
+                  type="button"
                   onClick={() => handleWeightDelta(-0.5)}
                   className="w-10 h-10 rounded-xl bg-white border border-slate-300 flex items-center justify-center text-slate-700 active:scale-95"
                 >
@@ -440,7 +480,11 @@ export const PosView: React.FC<PosViewProps> = ({
                       setWeightInputStr(raw);
                       const normalized = raw.replace(',', '.');
                       const num = parseFloat(normalized);
-                      setActualWeight(isNaN(num) ? 0 : num);
+                      const validNum = isNaN(num) ? 0 : num;
+                      setActualWeight(validNum);
+                      if (validNum > 0 && !selectedKiloan && kiloanServices.length > 0) {
+                        setSelectedKiloan(kiloanServices[0]);
+                      }
                     }
                   }}
                   onBlur={() => {
@@ -454,6 +498,7 @@ export const PosView: React.FC<PosViewProps> = ({
                   className="flex-1 text-center font-bold text-sm py-2 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                 />
                 <button
+                  type="button"
                   onClick={() => handleWeightDelta(0.5)}
                   className="w-10 h-10 rounded-xl bg-white border border-slate-300 flex items-center justify-center text-slate-700 active:scale-95"
                 >
@@ -462,12 +507,28 @@ export const PosView: React.FC<PosViewProps> = ({
               </div>
 
               {/* Quick weight pills */}
-              <div className="flex gap-1.5 justify-center pt-1">
+              <div className="flex gap-1.5 justify-center flex-wrap pt-1">
+                <button
+                  type="button"
+                  onClick={() => handleQuickWeight(0)}
+                  className={`px-2 py-0.5 text-[11px] border rounded-lg transition ${
+                    actualWeight === 0
+                      ? 'bg-slate-800 text-white border-slate-800 font-bold'
+                      : 'bg-white border-slate-200 text-slate-500 hover:border-slate-400'
+                  }`}
+                >
+                  Tanpa Kiloan (0 kg)
+                </button>
                 {[1, 2, 3, 5, 7].map((w) => (
                   <button
                     key={w}
+                    type="button"
                     onClick={() => handleQuickWeight(w)}
-                    className="px-2 py-0.5 text-[11px] bg-white border border-slate-200 rounded-lg text-slate-600 hover:border-blue-400"
+                    className={`px-2 py-0.5 text-[11px] border rounded-lg transition ${
+                      actualWeight === w
+                        ? 'bg-blue-600 text-white border-blue-600 font-bold'
+                        : 'bg-white border-slate-200 text-slate-600 hover:border-blue-400'
+                    }`}
                   >
                     {w} kg
                   </button>
@@ -587,6 +648,32 @@ export const PosView: React.FC<PosViewProps> = ({
             </div>
           </div>
 
+          {/* Live Ringkasan Pilihan (Kiloan + Satuan) */}
+          {(actualWeight > 0 || satuanItems.length > 0) && (
+            <div className="bg-blue-50/70 border border-blue-200 rounded-2xl p-3 space-y-1.5 text-xs">
+              <p className="font-bold text-blue-900 text-[11px] uppercase tracking-wide">
+                Ringkasan Layanan Terpilih:
+              </p>
+              {actualWeight > 0 && selectedKiloan && (
+                <div className="flex justify-between text-slate-700 font-medium">
+                  <span>
+                    • Kiloan: <strong className="text-slate-900">{selectedKiloan.name}</strong> ({formatWeight(actualWeight)} kg
+                    {billedWeight !== actualWeight ? ` → min ${formatWeight(billedWeight)} kg` : ''})
+                  </span>
+                  <span className="font-bold text-slate-900">{formatRupiah(mainServiceTotal)}</span>
+                </div>
+              )}
+              {satuanItems.map((itm) => (
+                <div key={itm.serviceId} className="flex justify-between text-slate-700 font-medium">
+                  <span>
+                    • Satuan: <strong className="text-slate-900">{itm.name}</strong> ×{itm.qty}
+                  </span>
+                  <span className="font-bold text-slate-900">{formatRupiah(itm.total)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
           <div className="flex gap-2">
             <button
               onClick={() => setStep(1)}
@@ -616,12 +703,15 @@ export const PosView: React.FC<PosViewProps> = ({
 
           {/* Ringkasan Biaya */}
           <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-1.5 text-xs">
-            <div className="flex justify-between text-slate-600">
-              <span>
-                {selectedKiloan?.name} ({formatWeight(billedWeight)} kg):
-              </span>
-              <span>{formatRupiah(mainServiceTotal)}</span>
-            </div>
+            {actualWeight > 0 && selectedKiloan && (
+              <div className="flex justify-between text-slate-600">
+                <span>
+                  {selectedKiloan.name} ({formatWeight(actualWeight)} kg
+                  {billedWeight !== actualWeight ? ` / min ${formatWeight(billedWeight)} kg` : ''}):
+                </span>
+                <span>{formatRupiah(mainServiceTotal)}</span>
+              </div>
+            )}
             {satuanItems.map((item, idx) => (
               <div key={idx} className="flex justify-between text-slate-600 text-[11px]">
                 <span>
