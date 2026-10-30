@@ -25,7 +25,17 @@ create table if not exists public.services (
   created_at timestamptz default now()
 );
 
--- 3. Tabel Pesanan (Orders)
+-- 2.5. Tabel Kecepatan Pengerjaan (Speeds)
+create table if not exists public.speeds (
+  id text primary key,
+  name text not null,
+  duration_label text default '2 Hari',
+  duration_hours numeric default 48,
+  fee numeric default 0,
+  created_at timestamptz default now()
+);
+
+-- 3. Tabel Pesanan (Orders) - Berelasi dengan Tabel Kecepatan (speeds)
 create table if not exists public.orders (
   id text primary key,
   customer_id text,
@@ -35,6 +45,7 @@ create table if not exists public.orders (
   estimated_completion timestamptz default now(),
   completed_at timestamptz,
   main_service text default 'Cuci setrika',
+  speed_id text references public.speeds(id) on update cascade on delete set null,
   speed text default 'Normal',
   speed_fee numeric default 0,
   actual_weight numeric default 0,
@@ -51,20 +62,40 @@ create table if not exists public.orders (
   cashier_name text default 'Mama Sela'
 );
 
+-- Migrasi aman jika tabel orders sudah ada sebelumnya: tambahkan kolom speed_id & foreign key
+alter table public.orders
+  add column if not exists speed_id text references public.speeds(id) on update cascade on delete set null;
+
 -- 4. Aktifkan Row Level Security (RLS)
 alter table public.customers enable row level security;
 alter table public.services enable row level security;
+alter table public.speeds enable row level security;
 alter table public.orders enable row level security;
 
 -- 5. Buat Kebijakan Akses (Policy) untuk Publishable/Anon Key
 create policy "Allow all on customers" on public.customers for all using (true) with check (true);
 create policy "Allow all on services" on public.services for all using (true) with check (true);
+create policy "Allow all on speeds" on public.speeds for all using (true) with check (true);
 create policy "Allow all on orders" on public.orders for all using (true) with check (true);
 
 -- 6. Aktifkan Realtime Replication (WebSocket)
 alter publication supabase_realtime add table public.customers;
 alter publication supabase_realtime add table public.services;
+alter publication supabase_realtime add table public.speeds;
 alter publication supabase_realtime add table public.orders;
+
+-- 6.5. Isi Data Awal Kecepatan (Speeds) & Hubungkan Relasi ke Orders
+insert into public.speeds (id, name, duration_label, duration_hours, fee)
+values
+  ('SPD-01', 'Normal', '2 Hari', 48, 0),
+  ('SPD-02', 'Express', '1 Hari', 24, 8000),
+  ('SPD-03', 'Kilat', '8 Jam', 8, 13000)
+on conflict (id) do nothing;
+
+update public.orders o
+set speed_id = s.id
+from public.speeds s
+where lower(o.speed) = lower(s.name) and o.speed_id is null;
 
 -- 7. Isi Data Awal Layanan (Services)
 insert into public.services (id, name, category, unit, price, hpp, profit_margin_percent)

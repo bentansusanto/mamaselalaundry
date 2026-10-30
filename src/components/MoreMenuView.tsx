@@ -25,7 +25,7 @@ export const MoreMenuView: React.FC<MoreMenuViewProps> = ({ onSelectSubView, onO
     {
       id: 'services' as MoreSubView,
       title: 'Manajemen Layanan',
-      desc: 'Daftar harga kiloan, satuan, HPP & profit margin',
+      desc: 'Daftar harga kiloan, satuan, tabel kecepatan, HPP & profit margin',
       icon: Sparkles,
       iconColor: 'text-blue-600 bg-blue-50',
     },

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Customer, Order, OrderProgressStatus, PaymentStatus, PaymentMethod, ServiceItem, UserAccount } from '@/types';
+import { Customer, Order, OrderProgressStatus, PaymentStatus, PaymentMethod, ServiceItem, SpeedItem, UserAccount } from '@/types';
 import {
   initDatabaseDefaults,
   getAllOrders,
@@ -14,6 +14,9 @@ import {
   getAllServices,
   saveService,
   deleteService,
+  getAllSpeeds,
+  saveSpeed,
+  deleteSpeed,
   getAllUsers,
   saveUser,
   getSyncQueue,
@@ -28,9 +31,11 @@ import {
   deleteOrderFromSupabase,
   syncServiceToSupabase,
   deleteServiceFromSupabase,
+  syncSpeedToSupabase,
+  deleteSpeedFromSupabase,
   syncOfflineQueueToSupabase,
 } from '@/lib/supabaseSync';
-import { INITIAL_USERS } from '@/lib/initialData';
+import { INITIAL_SPEEDS, INITIAL_USERS } from '@/lib/initialData';
 import { Navbar } from '@/components/Navbar';
 import { BottomNav, NavTab } from '@/components/BottomNav';
 import { DashboardView } from '@/components/DashboardView';
@@ -98,6 +103,7 @@ export default function Home() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [services, setServices] = useState<ServiceItem[]>([]);
+  const [speeds, setSpeeds] = useState<SpeedItem[]>(INITIAL_SPEEDS);
   const [users, setUsers] = useState<UserAccount[]>(INITIAL_USERS);
   const [currentUser, setCurrentUser] = useState<UserAccount>(INITIAL_USERS[0]);
 
@@ -119,11 +125,13 @@ export default function Home() {
       const loadedOrders = await getAllOrders();
       const loadedCustomers = await getAllCustomers();
       const loadedServices = await getAllServices();
+      const loadedSpeeds = await getAllSpeeds();
       const loadedUsers = await getAllUsers();
 
       setOrders(loadedOrders);
       setCustomers(loadedCustomers);
       setServices(loadedServices);
+      setSpeeds(loadedSpeeds);
       setUsers(loadedUsers);
       if (loadedUsers.length > 0) {
         setCurrentUser(loadedUsers[0]);
@@ -137,6 +145,7 @@ export default function Home() {
             setCustomers(res.customers);
             setOrders(res.orders);
             if (res.services.length > 0) setServices(res.services);
+            if (res.speeds && res.speeds.length > 0) setSpeeds(res.speeds);
           }
         } catch (supaErr) {
           console.warn('Initial Supabase sync error:', supaErr);
@@ -179,6 +188,7 @@ export default function Home() {
           setCustomers(res.customers);
           setOrders(res.orders);
           if (res.services.length > 0) setServices(res.services);
+          if (res.speeds && res.speeds.length > 0) setSpeeds(res.speeds);
         }
 
         if (res.syncedCount > 0) {
@@ -207,6 +217,7 @@ export default function Home() {
             setCustomers(res.customers);
             setOrders(res.orders);
             if (res.services.length > 0) setServices(res.services);
+            if (res.speeds && res.speeds.length > 0) setSpeeds(res.speeds);
           }
         } catch (e) {}
       }
@@ -220,9 +231,11 @@ export default function Home() {
       const freshOrders = await getAllOrders();
       const freshCustomers = await getAllCustomers();
       const freshServices = await getAllServices();
+      const freshSpeeds = await getAllSpeeds();
       setOrders(freshOrders);
       setCustomers(freshCustomers);
       setServices(freshServices);
+      setSpeeds(freshSpeeds);
     });
 
     return () => {
@@ -279,6 +292,7 @@ export default function Home() {
         setCustomers(res.customers);
         setOrders(res.orders);
         if (res.services.length > 0) setServices(res.services);
+        if (res.speeds && res.speeds.length > 0) setSpeeds(res.speeds);
       }
       showNotice(
         res.syncedCount > 0
@@ -430,6 +444,28 @@ export default function Home() {
     }
   };
 
+  // Speed Handlers (Tabel Kecepatan berelasi dengan Orders)
+  const handleSaveSpeed = async (speed: SpeedItem) => {
+    await saveSpeed(speed);
+    const [updatedSpeeds, updatedOrders] = await Promise.all([getAllSpeeds(), getAllOrders()]);
+    setSpeeds(updatedSpeeds);
+    setOrders(updatedOrders);
+    showNotice(`Kecepatan ${speed.name} (${speed.durationLabel}) tersimpan!`, 'success');
+    if (isOnline) {
+      await syncSpeedToSupabase(speed);
+    }
+  };
+
+  const handleDeleteSpeed = async (id: string) => {
+    await deleteSpeed(id);
+    const updatedSpeeds = await getAllSpeeds();
+    setSpeeds(updatedSpeeds);
+    showNotice('Data kecepatan berhasil dihapus', 'warning');
+    if (isOnline) {
+      await deleteSpeedFromSupabase(id);
+    }
+  };
+
   // User Handlers
   const handleSaveUser = async (u: UserAccount) => {
     await saveUser(u);
@@ -513,6 +549,7 @@ export default function Home() {
             orders={orders}
             customers={customers}
             services={services}
+            speeds={speeds}
             currentUser={currentUser}
             onOrderCreated={handleOrderCreated}
             onNewCustomer={handleSaveCustomer}
@@ -523,6 +560,7 @@ export default function Home() {
         {currentTab === 'orders' && (
           <OrdersView
             orders={orders}
+            speeds={speeds}
             onUpdateStatus={handleUpdateOrderStatus}
             onUpdatePayment={handleUpdatePaymentStatus}
             onViewReceipt={setActiveReceiptOrder}
@@ -569,11 +607,15 @@ export default function Home() {
             {moreSubView === 'services' && (
               <ServicesView
                 services={services}
+                speeds={speeds}
+                orders={orders}
                 onSaveService={handleSaveService}
                 onDeleteService={handleDeleteService}
+                onSaveSpeed={handleSaveSpeed}
+                onDeleteSpeed={handleDeleteSpeed}
               />
             )}
-            {moreSubView === 'reports' && <ReportsView orders={orders} />}
+            {moreSubView === 'reports' && <ReportsView orders={orders} speeds={speeds} />}
             {moreSubView === 'users' && (
               <UsersView
                 users={users}
@@ -609,6 +651,7 @@ export default function Home() {
       {/* Digital Receipt & Struk WhatsApp Modal */}
       <ReceiptModal
         order={activeReceiptOrder}
+        speeds={speeds}
         onClose={() => setActiveReceiptOrder(null)}
       />
 

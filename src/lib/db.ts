@@ -1,6 +1,6 @@
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
-import { Customer, Order, ServiceItem, UserAccount, SheetsConfig, SyncQueueItem } from '@/types';
-import { INITIAL_CUSTOMERS, INITIAL_ORDERS, INITIAL_SERVICES, INITIAL_USERS } from './initialData';
+import { Customer, Order, ServiceItem, SpeedItem, UserAccount, SheetsConfig, SyncQueueItem } from '@/types';
+import { INITIAL_CUSTOMERS, INITIAL_ORDERS, INITIAL_SERVICES, INITIAL_SPEEDS, INITIAL_USERS } from './initialData';
 
 interface LaundryDB extends DBSchema {
   orders: {
@@ -18,6 +18,10 @@ interface LaundryDB extends DBSchema {
     value: ServiceItem;
     indexes: { 'by-category': string };
   };
+  speeds: {
+    key: string;
+    value: SpeedItem;
+  };
   users: {
     key: string;
     value: UserAccount;
@@ -33,7 +37,7 @@ interface LaundryDB extends DBSchema {
 }
 
 const DB_NAME = 'laundry_pwa_db';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 let dbPromise: Promise<IDBPDatabase<LaundryDB>> | null = null;
 
@@ -63,6 +67,11 @@ export function getDB() {
         if (!db.objectStoreNames.contains('services')) {
           const srvStore = db.createObjectStore('services', { keyPath: 'id' });
           srvStore.createIndex('by-category', 'category');
+        }
+
+        // Speeds (Tabel Kecepatan)
+        if (!db.objectStoreNames.contains('speeds')) {
+          db.createObjectStore('speeds', { keyPath: 'id' });
         }
 
         // Users
@@ -226,6 +235,47 @@ export async function initDatabaseDefaults() {
     await txS.done;
   }
 
+  // Initialize / restore Speeds table (Tabel Kecepatan) and link existing Orders
+  const currentSpeeds = await db.getAll('speeds');
+  const deletedSpeedIds: string[] = (await db.get('settings', 'deleted_speed_ids')) || [];
+  const isSpeedsSeededV1 = await db.get('settings', 'speeds_seeded_v1');
+  if (!isSpeedsSeededV1 || currentSpeeds.length === 0) {
+    const txSpd = db.transaction('speeds', 'readwrite');
+    for (const spd of INITIAL_SPEEDS) {
+      if (!deletedSpeedIds.includes(spd.id)) {
+        const existingSpd = await txSpd.store.get(spd.id);
+        if (!existingSpd) {
+          await txSpd.store.put(spd);
+        }
+      }
+    }
+    await txSpd.done;
+    await db.put('settings', true, 'speeds_seeded_v1');
+  }
+
+  // Backfill speedId relation on existing orders so all orders link to speeds table
+  const allSpeedsNow = await db.getAll('speeds');
+  const existingOrders = await db.getAll('orders');
+  let ordersNeedUpdate = false;
+  for (const ord of existingOrders) {
+    const matchedSpd =
+      (ord.speedId && allSpeedsNow.find((s) => s.id === ord.speedId)) ||
+      allSpeedsNow.find((s) => s.name.trim().toLowerCase() === String(ord.speed || 'Normal').trim().toLowerCase());
+    if (matchedSpd && (ord.speedId !== matchedSpd.id || ord.speedDuration !== matchedSpd.durationLabel)) {
+      ord.speedId = matchedSpd.id;
+      ord.speed = matchedSpd.name;
+      ord.speedDuration = matchedSpd.durationLabel;
+      ordersNeedUpdate = true;
+    }
+  }
+  if (ordersNeedUpdate) {
+    const txOrd = db.transaction('orders', 'readwrite');
+    for (const ord of existingOrders) {
+      await txOrd.store.put(ord);
+    }
+    await txOrd.done;
+  }
+
   // Ensure current user is synced to single user Mama Sela
   const currentUsers = await db.getAll('users');
   if (
@@ -247,11 +297,18 @@ export async function getDeletedServiceIds(): Promise<string[]> {
   return (await db.get('settings', 'deleted_service_ids')) || [];
 }
 
+export async function getDeletedSpeedIds(): Promise<string[]> {
+  const db = await getDB();
+  if (!db) return [];
+  return (await db.get('settings', 'deleted_speed_ids')) || [];
+}
+
 // Helper CRUD operations
 export async function getAllOrders(): Promise<Order[]> {
   const db = await getDB();
   if (!db) return [];
-  const orders = await db.getAll('orders');
+  const [orders, speeds] = await Promise.all([db.getAll('orders'), db.getAll('speeds')]);
+  const speedsList = speeds.length > 0 ? speeds : INITIAL_SPEEDS;
   for (const o of orders) {
     if (!o.createdAt || o.createdAt === 'Invalid Date') {
       o.createdAt = new Date().toISOString();
@@ -266,6 +323,18 @@ export async function getAllOrders(): Promise<Order[]> {
         }
       } else {
         o.items = [];
+      }
+    }
+    // Resolve relation to speeds table
+    const relatedSpeed =
+      (o.speedId && speedsList.find((s) => s.id === o.speedId)) ||
+      speedsList.find((s) => s.name.trim().toLowerCase() === String(o.speed || 'Normal').trim().toLowerCase());
+    if (relatedSpeed) {
+      o.speedId = relatedSpeed.id;
+      o.speed = relatedSpeed.name;
+      o.speedDuration = relatedSpeed.durationLabel;
+      if (o.speedFee === undefined || o.speedFee === null) {
+        o.speedFee = relatedSpeed.fee;
       }
     }
   }
@@ -365,6 +434,62 @@ export async function deleteService(id: string, skipQueue = false): Promise<void
   }
   if (!skipQueue) {
     await queueSync('services', 'delete', { id });
+  }
+}
+
+export async function getAllSpeeds(): Promise<SpeedItem[]> {
+  const db = await getDB();
+  if (!db) return INITIAL_SPEEDS;
+  const list = await db.getAll('speeds');
+  if (list.length === 0) return INITIAL_SPEEDS;
+  return list.sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true }));
+}
+
+export async function saveSpeed(speed: SpeedItem, skipQueue = false): Promise<void> {
+  const db = await getDB();
+  if (!db) return;
+  await db.put('speeds', speed);
+  const deletedIds: string[] = (await db.get('settings', 'deleted_speed_ids')) || [];
+  if (deletedIds.includes(speed.id)) {
+    await db.put(
+      'settings',
+      deletedIds.filter((id) => id !== speed.id),
+      'deleted_speed_ids'
+    );
+  }
+  // Keep related orders synchronized with this speed's latest name and durationLabel
+  const allOrders = await db.getAll('orders');
+  const relatedOrders = allOrders.filter(
+    (o) =>
+      o.speedId === speed.id ||
+      (!o.speedId && String(o.speed || '').trim().toLowerCase() === speed.name.trim().toLowerCase())
+  );
+  if (relatedOrders.length > 0) {
+    const txO = db.transaction('orders', 'readwrite');
+    for (const o of relatedOrders) {
+      o.speedId = speed.id;
+      o.speed = speed.name;
+      o.speedDuration = speed.durationLabel;
+      await txO.store.put(o);
+    }
+    await txO.done;
+  }
+  if (!skipQueue) {
+    await queueSync('speeds', 'update', speed);
+  }
+}
+
+export async function deleteSpeed(id: string, skipQueue = false): Promise<void> {
+  const db = await getDB();
+  if (!db) return;
+  await db.delete('speeds', id);
+  const deletedIds: string[] = (await db.get('settings', 'deleted_speed_ids')) || [];
+  if (!deletedIds.includes(id)) {
+    deletedIds.push(id);
+    await db.put('settings', deletedIds, 'deleted_speed_ids');
+  }
+  if (!skipQueue) {
+    await queueSync('speeds', 'delete', { id });
   }
 }
 

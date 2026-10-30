@@ -1,6 +1,6 @@
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
-import { SpeedType } from '@/types';
+import { Order, SpeedItem, SpeedType } from '@/types';
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -93,11 +93,49 @@ export function calculateBilledWeight(actualWeight: number): number {
   return actualWeight;
 }
 
-export const SPEED_FEES: Record<SpeedType, number> = {
+export const SPEED_FEES: Record<string, number> = {
   Normal: 0,
   Express: 8000,
   Kilat: 13000,
 };
+
+/**
+ * Resolves the SpeedItem related to an Order (via foreign key speedId or matching speed name).
+ */
+export function resolveOrderSpeed(
+  order: Pick<Order, 'speedId' | 'speed' | 'speedFee' | 'speedDuration'>,
+  speeds: SpeedItem[] = []
+): SpeedItem {
+  if (order.speedId) {
+    const byId = speeds.find((s) => s.id === order.speedId);
+    if (byId) {
+      return {
+        ...byId,
+        fee: order.speedFee !== undefined && order.speedFee !== null ? order.speedFee : byId.fee,
+      };
+    }
+  }
+  const orderSpeedName = String(order.speed || 'Normal').trim().toLowerCase();
+  const byName = speeds.find((s) => s.name.trim().toLowerCase() === orderSpeedName);
+  if (byName) {
+    return {
+      ...byName,
+      fee: order.speedFee !== undefined && order.speedFee !== null ? order.speedFee : byName.fee,
+    };
+  }
+  const fallbackDuration =
+    order.speedDuration ||
+    (orderSpeedName === 'kilat' ? '8 Jam' : orderSpeedName === 'express' ? '1 Hari' : '2 Hari');
+  const fallbackHours =
+    orderSpeedName === 'kilat' ? 8 : orderSpeedName === 'express' ? 24 : 48;
+  return {
+    id: order.speedId || 'SPD-01',
+    name: order.speed || 'Normal',
+    durationLabel: fallbackDuration,
+    durationHours: fallbackHours,
+    fee: order.speedFee !== undefined && order.speedFee !== null ? order.speedFee : (SPEED_FEES[order.speed] || 0),
+  };
+}
 
 export function calculateProfitMargin(price: number, hpp: number): number {
   if (price <= 0) return 0;

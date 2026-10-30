@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Order, OrderProgressStatus, PaymentStatus, PaymentMethod } from '@/types';
-import { formatDateTime, formatRupiah, formatWeight } from '@/lib/utils';
+import { Order, OrderProgressStatus, PaymentStatus, PaymentMethod, SpeedItem } from '@/types';
+import { INITIAL_SPEEDS } from '@/lib/initialData';
+import { formatDateTime, formatRupiah, formatWeight, resolveOrderSpeed } from '@/lib/utils';
 import { 
   Search, 
   Package, 
@@ -24,6 +25,7 @@ import {
 
 interface OrdersViewProps {
   orders: Order[];
+  speeds?: SpeedItem[];
   onUpdateStatus: (orderId: string, nextStatus: OrderProgressStatus) => void;
   onUpdatePayment: (orderId: string, paymentStatus: PaymentStatus, paymentMethod?: PaymentMethod) => void;
   onViewReceipt: (order: Order) => void;
@@ -33,12 +35,14 @@ interface OrdersViewProps {
 
 export const OrdersView: React.FC<OrdersViewProps> = ({
   orders,
+  speeds = INITIAL_SPEEDS,
   onUpdateStatus,
   onUpdatePayment,
   onViewReceipt,
   onDeleteOrder,
   onClearAllOrders,
 }) => {
+  const speedList = speeds && speeds.length > 0 ? speeds : INITIAL_SPEEDS;
   const [activeFilter, setActiveFilter] = useState<'Semua' | OrderProgressStatus>('Semua');
   const [search, setSearch] = useState('');
 
@@ -136,8 +140,10 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
           </div>
         ) : (
           filteredOrders.map((order) => {
-            const isExpress = order.speed === 'Express';
-            const isKilat = order.speed === 'Kilat';
+            const relatedSpeed = resolveOrderSpeed(order, speedList);
+            const lowerSpeedName = relatedSpeed.name.toLowerCase();
+            const isExpress = lowerSpeedName.includes('express');
+            const isKilat = lowerSpeedName.includes('kilat');
             const isPaid = order.paymentStatus === 'Lunas';
             const statusBorderColor =
               order.progressStatus === 'Proses'
@@ -151,23 +157,33 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
                 key={order.id}
                 className={`bg-white rounded-2xl p-4 border border-slate-200 border-l-4 ${statusBorderColor} shadow-sm space-y-3 transition hover:border-slate-300`}
               >
-                {/* Header Card: Order ID, Date & Workflow Status Badge */}
+                {/* Header Card: Order ID, Date, Speed Relation Badge & Workflow Status Badge */}
                 <div className="flex items-start justify-between gap-2">
                   <div className="space-y-0.5">
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <span className="font-extrabold text-xs text-slate-900 tracking-tight">
                         #{order.id}
                       </span>
-                      {isExpress && (
-                        <span className="px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 text-[10px] font-bold inline-flex items-center gap-1">
-                          <Zap aria-hidden="true" className="w-3 h-3" /> Express
+                      <span
+                        className={`px-2 py-0.5 rounded-md text-[10px] font-bold inline-flex items-center gap-1 border ${
+                          isKilat
+                            ? 'bg-rose-50 text-rose-800 border-rose-200'
+                            : isExpress
+                            ? 'bg-amber-50 text-amber-800 border-amber-200'
+                            : 'bg-slate-100 text-slate-700 border-slate-200'
+                        }`}
+                      >
+                        {isKilat ? (
+                          <Flame aria-hidden="true" className="w-3 h-3 text-rose-600" />
+                        ) : isExpress ? (
+                          <Zap aria-hidden="true" className="w-3 h-3 text-amber-600" />
+                        ) : (
+                          <Clock aria-hidden="true" className="w-3 h-3 text-slate-500" />
+                        )}
+                        <span>
+                          {relatedSpeed.name} • {relatedSpeed.durationLabel}
                         </span>
-                      )}
-                      {isKilat && (
-                        <span className="px-2 py-0.5 rounded-md bg-rose-100 text-rose-800 text-[10px] font-bold inline-flex items-center gap-1">
-                          <Flame aria-hidden="true" className="w-3 h-3" /> Kilat
-                        </span>
-                      )}
+                      </span>
                     </div>
                     <p className="text-[11px] text-slate-400 font-medium">
                       {formatDateTime(order.createdAt)}
@@ -202,7 +218,7 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
                   </span>
                 </div>
 
-                {/* Middle Info Box: Customer, Service Details & Price */}
+                {/* Middle Info Box: Customer, Service Details, Speed Relation & Price */}
                 <div className="bg-slate-50/80 rounded-xl p-3 border border-slate-100 flex items-center justify-between gap-3">
                   <div className="min-w-0 flex-1 space-y-1">
                     <h3 className="font-bold text-sm text-slate-900 truncate">
@@ -226,6 +242,18 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
                         </>
                       ) : (
                         <span className="font-bold text-slate-900">{order.mainService}</span>
+                      )}
+                    </p>
+                    <p className="text-[11px] text-slate-500 font-medium">
+                      Kecepatan:{' '}
+                      <span className="font-bold text-slate-800">
+                        {relatedSpeed.name} ({relatedSpeed.durationLabel})
+                      </span>
+                      {relatedSpeed.fee > 0 && (
+                        <span className="text-amber-700 font-bold">
+                          {' '}
+                          • +{formatRupiah(relatedSpeed.fee)}
+                        </span>
                       )}
                     </p>
                     {(order.items || []).length > 0 && (
@@ -399,6 +427,18 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
                     </span>
                   </div>
                 )}
+                {(() => {
+                  const modalSpd = resolveOrderSpeed(paymentModalOrder, speedList);
+                  return (
+                    <div className="flex justify-between text-[11px] gap-2">
+                      <span className="text-slate-500 shrink-0">Kecepatan:</span>
+                      <span className="text-slate-700 text-right font-semibold">
+                        {modalSpd.name} ({modalSpd.durationLabel})
+                        {modalSpd.fee > 0 ? ` • +${formatRupiah(modalSpd.fee)}` : ''}
+                      </span>
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* Tagihan Card */}

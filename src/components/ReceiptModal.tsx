@@ -1,17 +1,25 @@
 'use client';
 
 import React from 'react';
-import { Order } from '@/types';
-import { formatRupiah, formatDateTime, formatWeight } from '@/lib/utils';
+import { Order, SpeedItem } from '@/types';
+import { INITIAL_SPEEDS } from '@/lib/initialData';
+import { formatRupiah, formatDateTime, formatWeight, resolveOrderSpeed } from '@/lib/utils';
 import { Printer, Share2, X, CheckCircle, Clock } from 'lucide-react';
 
 interface ReceiptModalProps {
   order: Order | null;
+  speeds?: SpeedItem[];
   onClose: () => void;
 }
 
-export const ReceiptModal: React.FC<ReceiptModalProps> = ({ order, onClose }) => {
+export const ReceiptModal: React.FC<ReceiptModalProps> = ({
+  order,
+  speeds = INITIAL_SPEEDS,
+  onClose,
+}) => {
   if (!order) return null;
+
+  const relatedSpeed = resolveOrderSpeed(order, speeds);
 
   const handlePrint = () => {
     window.print();
@@ -58,7 +66,7 @@ Tanggal Masuk: ${formatDateTime(order.createdAt)}
 Estimasi Selesai: ${formatDateTime(order.estimatedCompletion)}
 
 *Rincian:*
-${kiloanLine}${itemsSummary}- Kecepatan: ${order.speed} ${
+${kiloanLine}${itemsSummary}- Kecepatan: ${relatedSpeed.name} (${relatedSpeed.durationLabel}) ${
       order.speedFee > 0 ? `(+${formatRupiah(order.speedFee)})` : ''
     }
 ${roundingSummary}
@@ -154,7 +162,9 @@ _Terima kasih telah mempercayakan pakaian Anda kepada kami!_`;
 
             {/* Speed Fee */}
             <div className="flex justify-between text-[11px]">
-              <span>Kecepatan: {order.speed}</span>
+              <span>
+                Kecepatan: {relatedSpeed.name} ({relatedSpeed.durationLabel})
+              </span>
               <span>{order.speedFee > 0 ? formatRupiah(order.speedFee) : 'Rp 0'}</span>
             </div>
 

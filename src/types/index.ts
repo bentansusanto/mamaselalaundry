@@ -21,7 +21,15 @@ export interface ServiceItem {
   profitMarginPercent: number; // ((price - hpp) / price) * 100
 }
 
-export type SpeedType = 'Normal' | 'Express' | 'Kilat';
+export type SpeedType = 'Normal' | 'Express' | 'Kilat' | (string & {});
+
+export interface SpeedItem {
+  id: string; // e.g. SPD-01
+  name: string; // e.g. Normal, Express, Kilat
+  durationLabel: string; // e.g. "2 Hari", "1 Hari", "8 Jam"
+  durationHours: number; // e.g. 48, 24, 8 (dipakai untuk kalkulasi estimasi selesai)
+  fee: number; // Biaya tambahan (Rp), misal: 0, 8000, 13000
+}
 
 export interface OrderItemDetail {
   id: string;
@@ -47,8 +55,10 @@ export interface Order {
   completedAt?: string; // Tanggal Selesai Aktual
   estimatedCompletion: string; // Tanggal Estimasi Selesai
   mainService: string; // e.g. "Cuci setrika", "Setrika", "Cuci lipat", or "Hanya Satuan"
-  speed: SpeedType;
-  speedFee: number; // Normal: 0, Express: 8000, Kilat: 13000
+  speedId?: string; // Relasi (Foreign Key) ke tabel speeds (contoh: "SPD-01")
+  speed: SpeedType; // Nama kecepatan dari relasi tabel speeds
+  speedFee: number; // Biaya kecepatan dari relasi tabel speeds
+  speedDuration?: string; // Estimasi durasi dari relasi tabel speeds (contoh: "2 Hari")
   actualWeight: number; // Berat timbangan real
   billedWeight: number; // Min 3 kg rule
   items: OrderItemDetail[]; // Bedcover, Selimut, dll.
@@ -90,7 +100,7 @@ export interface SheetsConfig {
 
 export interface SyncQueueItem {
   id: string;
-  entity: 'orders' | 'customers' | 'services' | 'payments';
+  entity: 'orders' | 'customers' | 'services' | 'speeds' | 'payments';
   action: 'insert' | 'update' | 'delete';
   data: any;
   timestamp: string;

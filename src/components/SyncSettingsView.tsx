@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { Check, RefreshCw, Database, Zap, Download, ShieldCheck, CheckCircle2 } from 'lucide-react';
-import { getAllCustomers, getAllOrders, getAllServices } from '@/lib/db';
+import { getAllCustomers, getAllOrders, getAllServices, getAllSpeeds } from '@/lib/db';
 
 interface SyncSettingsViewProps {
   isSyncing: boolean;
@@ -38,10 +38,11 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
   const handleExportBackup = async () => {
     try {
       setIsExporting(true);
-      const [orders, customers, services] = await Promise.all([
+      const [orders, customers, services, speeds] = await Promise.all([
         getAllOrders(),
         getAllCustomers(),
         getAllServices(),
+        getAllSpeeds(),
       ]);
 
       const backupData = {
@@ -52,11 +53,13 @@ export const SyncSettingsView: React.FC<SyncSettingsViewProps> = ({
           totalOrders: orders.length,
           totalCustomers: customers.length,
           totalServices: services.length,
+          totalSpeeds: speeds.length,
         },
         data: {
           orders,
           customers,
           services,
+          speeds,
         },
       };
 

@@ -1,16 +1,19 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Order } from '@/types';
-import { formatRupiah, formatDate, parseSafeDate } from '@/lib/utils';
+import { Order, SpeedItem } from '@/types';
+import { INITIAL_SPEEDS } from '@/lib/initialData';
+import { formatRupiah, formatDate, parseSafeDate, resolveOrderSpeed } from '@/lib/utils';
 import { BarChart3, Download, TrendingUp, DollarSign, CreditCard, Scale, CheckCircle, Banknote, QrCode } from 'lucide-react';
 
 interface ReportsViewProps {
   orders: Order[];
+  speeds?: SpeedItem[];
 }
 
-export const ReportsView: React.FC<ReportsViewProps> = ({ orders }) => {
+export const ReportsView: React.FC<ReportsViewProps> = ({ orders, speeds = INITIAL_SPEEDS }) => {
   const [filterPeriod, setFilterPeriod] = useState<'Month' | 'Quarter' | 'Years'>('Month');
+  const speedList = speeds && speeds.length > 0 ? speeds : INITIAL_SPEEDS;
 
   // Filter orders based on period
   const filteredOrders = React.useMemo(() => {
@@ -207,22 +210,32 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ orders }) => {
         </div>
       </div>
 
-      {/* Speed Choice Breakdown */}
+      {/* Speed Choice Breakdown (Dinamis dari Tabel Kecepatan) */}
       <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm space-y-2.5">
         <h3 className="font-bold text-xs text-slate-900">Breakdown Pilihan Kecepatan</h3>
         <div className="grid grid-cols-3 gap-2 text-center text-xs">
-          <div className="p-2 bg-slate-50 rounded-xl border border-slate-200">
-            <span className="text-[10px] text-slate-500">Normal</span>
-            <p className="font-extrabold text-slate-800 text-sm mt-0.5">{normalCount}</p>
-          </div>
-          <div className="p-2 bg-yellow-50 rounded-xl border border-yellow-200">
-            <span className="text-[10px] text-yellow-700">Express</span>
-            <p className="font-extrabold text-yellow-800 text-sm mt-0.5">{expressCount}</p>
-          </div>
-          <div className="p-2 bg-green-50 rounded-xl border border-green-200">
-            <span className="text-[10px] text-green-700">Kilat</span>
-            <p className="font-extrabold text-green-800 text-sm mt-0.5">{kilatCount}</p>
-          </div>
+          {speedList.map((spd) => {
+            const count = filteredOrders.filter((o) => {
+              const resolved = resolveOrderSpeed(o, speedList);
+              return resolved.id === spd.id || resolved.name.toLowerCase() === spd.name.toLowerCase();
+            }).length;
+            const lower = spd.name.toLowerCase();
+            const isExp = lower.includes('express');
+            const isKil = lower.includes('kilat');
+            const cardStyle = isKil
+              ? 'bg-green-50 border-green-200 text-green-800'
+              : isExp
+              ? 'bg-yellow-50 border-yellow-200 text-yellow-800'
+              : 'bg-slate-50 border-slate-200 text-slate-800';
+
+            return (
+              <div key={spd.id} className={`p-2 rounded-xl border ${cardStyle}`}>
+                <span className="text-[10px] opacity-80 block font-semibold">{spd.name}</span>
+                <span className="text-[9px] opacity-65 block">{spd.durationLabel}</span>
+                <p className="font-extrabold text-sm mt-0.5">{count}</p>
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>

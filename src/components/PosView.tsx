@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Customer, Order, OrderItemDetail, PaymentMethod, PaymentStatus, ServiceItem, SpeedType, UserAccount } from '@/types';
-import { calculateBilledWeight, formatRupiah, formatWeight, SPEED_FEES, roundPaymentTotal } from '@/lib/utils';
+import { Customer, Order, OrderItemDetail, PaymentMethod, PaymentStatus, ServiceItem, SpeedItem, UserAccount } from '@/types';
+import { INITIAL_SPEEDS } from '@/lib/initialData';
+import { calculateBilledWeight, formatRupiah, formatWeight, roundPaymentTotal } from '@/lib/utils';
 import { getAllOrders } from '@/lib/db';
 import { User, Scale, Zap, CreditCard, Plus, Minus, Search, Check, AlertCircle, Sparkles, Banknote, QrCode, Flame, Clock } from 'lucide-react';
 
@@ -10,6 +11,7 @@ interface PosViewProps {
   orders?: Order[];
   customers: Customer[];
   services: ServiceItem[];
+  speeds?: SpeedItem[];
   currentUser: UserAccount;
   onOrderCreated: (order: Order) => void;
   onNewCustomer: (customer: Customer) => void;
@@ -19,6 +21,7 @@ export const PosView: React.FC<PosViewProps> = ({
   orders,
   customers,
   services,
+  speeds = INITIAL_SPEEDS,
   currentUser,
   onOrderCreated,
   onNewCustomer,
@@ -89,8 +92,18 @@ export const PosView: React.FC<PosViewProps> = ({
     }
   };
 
-  // Speed
-  const [speed, setSpeed] = useState<SpeedType>('Normal');
+  // Speed (Related to Tabel Kecepatan / speeds)
+  const speedList = speeds && speeds.length > 0 ? speeds : INITIAL_SPEEDS;
+  const [selectedSpeedId, setSelectedSpeedId] = useState<string>(speedList[0]?.id || 'SPD-01');
+
+  useEffect(() => {
+    if (speedList.length > 0 && !speedList.some((s) => s.id === selectedSpeedId)) {
+      setSelectedSpeedId(speedList[0].id);
+    }
+  }, [speedList, selectedSpeedId]);
+
+  const selectedSpeedObj: SpeedItem =
+    speedList.find((s) => s.id === selectedSpeedId) || speedList[0] || INITIAL_SPEEDS[0];
 
   // Payment
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>('Lunas');
@@ -122,7 +135,7 @@ export const PosView: React.FC<PosViewProps> = ({
     });
 
   const itemsTotal = satuanItems.reduce((acc, curr) => acc + curr.total, 0);
-  const speedFee = SPEED_FEES[speed];
+  const speedFee = selectedSpeedObj ? selectedSpeedObj.fee : 0;
   const rawGrandTotal = mainServiceTotal + itemsTotal + speedFee;
   const grandTotal = roundPaymentTotal(rawGrandTotal);
   const roundingAdjustment = grandTotal - rawGrandTotal;
@@ -171,10 +184,8 @@ export const PosView: React.FC<PosViewProps> = ({
     }
 
     const now = new Date();
-    // Estimasi selesai berdasarkan speed
-    let hoursToAdd = 48; // Normal standard 2 hari
-    if (speed === 'Express') hoursToAdd = 24; // 1 hari
-    if (speed === 'Kilat') hoursToAdd = 8; // Same day (8 jam)
+    // Estimasi selesai berdasarkan relasi Tabel Kecepatan (speeds.durationHours)
+    const hoursToAdd = selectedSpeedObj?.durationHours || 48;
     const estimatedDate = new Date(now.getTime() + hoursToAdd * 60 * 60 * 1000);
 
     const dd = String(now.getDate()).padStart(2, '0');
@@ -205,8 +216,10 @@ export const PosView: React.FC<PosViewProps> = ({
       createdAt: now.toISOString(),
       estimatedCompletion: estimatedDate.toISOString(),
       mainService: actualWeight > 0 && selectedKiloan ? selectedKiloan.name : 'Satuan Saja',
-      speed,
-      speedFee,
+      speedId: selectedSpeedObj.id,
+      speed: selectedSpeedObj.name,
+      speedFee: selectedSpeedObj.fee,
+      speedDuration: selectedSpeedObj.durationLabel,
       actualWeight,
       billedWeight,
       items: satuanItems,
@@ -230,7 +243,7 @@ export const PosView: React.FC<PosViewProps> = ({
     setActualWeight(3.0);
     setWeightInputStr('3');
     setSatuanQuantities({});
-    setSpeed('Normal');
+    setSelectedSpeedId(speedList[0]?.id || 'SPD-01');
     setPaymentStatus('Lunas');
     setNotes('');
     setCashGiven('');
@@ -594,61 +607,58 @@ export const PosView: React.FC<PosViewProps> = ({
             </div>
           </div>
 
-          {/* 3. Kecepatan Pengerjaan */}
+          {/* 3. Kecepatan Pengerjaan (Dinamis dari Tabel Kecepatan) */}
           <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm space-y-2.5">
             <h3 className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
               <Zap className="w-4 h-4 text-amber-500" />
               3. Kecepatan Pengerjaan
             </h3>
             <div className="grid grid-cols-3 gap-2">
-              {/* Normal */}
-              <button
-                type="button"
-                onClick={() => setSpeed('Normal')}
-                className={`p-2.5 rounded-xl border text-center transition flex flex-col items-center ${
-                  speed === 'Normal'
-                    ? 'border-blue-600 bg-blue-50 text-blue-900 ring-2 ring-blue-500/20'
-                    : 'border-slate-200 hover:bg-slate-50'
-                }`}
-              >
-                <span className="text-xs font-bold">Normal</span>
-                <span className="text-[10px] text-slate-500 mt-0.5">2 Hari</span>
-                <span className="text-[11px] font-semibold text-blue-600 mt-1">+Rp 0</span>
-              </button>
+              {speedList.map((spd) => {
+                const isSelected = selectedSpeedObj?.id === spd.id;
+                const lowerName = spd.name.toLowerCase();
+                const isExpress = lowerName.includes('express');
+                const isKilat = lowerName.includes('kilat');
 
-              {/* Express */}
-              <button
-                type="button"
-                onClick={() => setSpeed('Express')}
-                className={`p-2.5 rounded-xl border text-center transition flex flex-col items-center ${
-                  speed === 'Express'
-                    ? 'border-yellow-500 bg-yellow-50 text-yellow-900 ring-2 ring-yellow-500/20'
-                    : 'border-slate-200 hover:bg-slate-50'
-                }`}
-              >
-                <span className="text-xs font-bold text-yellow-800">Express</span>
-                <span className="text-[10px] text-yellow-600 mt-0.5">1 Hari</span>
-                <span className="text-[11px] font-semibold text-yellow-700 mt-1">+Rp 8.000</span>
-              </button>
+                const activeClass = isKilat
+                  ? 'border-green-500 bg-green-50 text-green-900 ring-2 ring-green-500/20'
+                  : isExpress
+                  ? 'border-yellow-500 bg-yellow-50 text-yellow-900 ring-2 ring-yellow-500/20'
+                  : 'border-blue-600 bg-blue-50 text-blue-900 ring-2 ring-blue-500/20';
 
-              {/* Kilat */}
-              <button
-                type="button"
-                onClick={() => setSpeed('Kilat')}
-                className={`p-2.5 rounded-xl border text-center transition flex flex-col items-center ${
-                  speed === 'Kilat'
-                    ? 'border-green-500 bg-green-50 text-green-900 ring-2 ring-green-500/20'
-                    : 'border-slate-200 hover:bg-slate-50'
-                }`}
-              >
-                <span className="text-xs font-bold text-green-800">Kilat</span>
-                <span className="text-[10px] text-green-600 mt-0.5">8 Jam</span>
-                <span className="text-[11px] font-semibold text-green-700 mt-1">+Rp 13.000</span>
-              </button>
+                const titleColor = isKilat
+                  ? 'text-green-800'
+                  : isExpress
+                  ? 'text-yellow-800'
+                  : 'text-slate-900';
+
+                const feeColor = isKilat
+                  ? 'text-green-700'
+                  : isExpress
+                  ? 'text-yellow-700'
+                  : 'text-blue-600';
+
+                return (
+                  <button
+                    key={spd.id}
+                    type="button"
+                    onClick={() => setSelectedSpeedId(spd.id)}
+                    className={`p-2.5 rounded-xl border text-center transition flex flex-col items-center ${
+                      isSelected ? activeClass : 'border-slate-200 hover:bg-slate-50'
+                    }`}
+                  >
+                    <span className={`text-xs font-bold ${titleColor}`}>{spd.name}</span>
+                    <span className="text-[10px] text-slate-500 mt-0.5">{spd.durationLabel}</span>
+                    <span className={`text-[11px] font-semibold mt-1 ${feeColor}`}>
+                      +{formatRupiah(spd.fee)}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
-          {/* Live Ringkasan Pilihan (Kiloan + Satuan) */}
+          {/* Live Ringkasan Pilihan (Kiloan + Satuan + Kecepatan) */}
           {(actualWeight > 0 || satuanItems.length > 0) && (
             <div className="bg-blue-50/70 border border-blue-200 rounded-2xl p-3 space-y-1.5 text-xs">
               <p className="font-bold text-blue-900 text-[11px] uppercase tracking-wide">
@@ -671,6 +681,12 @@ export const PosView: React.FC<PosViewProps> = ({
                   <span className="font-bold text-slate-900">{formatRupiah(itm.total)}</span>
                 </div>
               ))}
+              <div className="flex justify-between text-slate-700 font-medium pt-0.5 border-t border-blue-200/60">
+                <span>
+                  • Kecepatan: <strong className="text-slate-900">{selectedSpeedObj.name}</strong> ({selectedSpeedObj.durationLabel})
+                </span>
+                <span className="font-bold text-slate-900">+{formatRupiah(speedFee)}</span>
+              </div>
             </div>
           )}
 
@@ -721,8 +737,10 @@ export const PosView: React.FC<PosViewProps> = ({
               </div>
             ))}
             <div className="flex justify-between text-slate-600">
-              <span>Kecepatan ({speed}):</span>
-              <span>{speedFee > 0 ? formatRupiah(speedFee) : 'Standar (+Rp 0)'}</span>
+              <span>
+                Kecepatan ({selectedSpeedObj.name} • {selectedSpeedObj.durationLabel}):
+              </span>
+              <span>{speedFee > 0 ? `+${formatRupiah(speedFee)}` : 'Standar (+Rp 0)'}</span>
             </div>
             {roundingAdjustment !== 0 && (
               <div className="flex justify-between text-slate-500 text-[11px]">

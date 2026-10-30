@@ -1,5 +1,29 @@
-import { Customer, Order, ServiceItem, UserAccount } from '@/types';
+import { Customer, Order, ServiceItem, SpeedItem, UserAccount } from '@/types';
 import { calculateProfitMargin } from './utils';
+
+export const INITIAL_SPEEDS: SpeedItem[] = [
+  {
+    id: 'SPD-01',
+    name: 'Normal',
+    durationLabel: '2 Hari',
+    durationHours: 48,
+    fee: 0,
+  },
+  {
+    id: 'SPD-02',
+    name: 'Express',
+    durationLabel: '1 Hari',
+    durationHours: 24,
+    fee: 8000,
+  },
+  {
+    id: 'SPD-03',
+    name: 'Kilat',
+    durationLabel: '8 Jam',
+    durationHours: 8,
+    fee: 13000,
+  },
+];
 
 export const INITIAL_SERVICES: ServiceItem[] = [
   {
