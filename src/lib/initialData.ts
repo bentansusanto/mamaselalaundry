@@ -8,20 +8,23 @@ export const INITIAL_SPEEDS: SpeedItem[] = [
     durationLabel: '2 Hari',
     durationHours: 48,
     fee: 0,
+    feeSecondary: 0,
   },
   {
     id: 'SPD-02',
     name: 'Express',
     durationLabel: '1 Hari',
     durationHours: 24,
-    fee: 8000,
+    fee: 10000,
+    feeSecondary: 6000,
   },
   {
     id: 'SPD-03',
     name: 'Kilat',
     durationLabel: '8 Jam',
     durationHours: 8,
-    fee: 13000,
+    fee: 15000,
+    feeSecondary: 9000,
   },
 ];
 

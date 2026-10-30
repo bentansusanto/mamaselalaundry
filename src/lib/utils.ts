@@ -1,6 +1,6 @@
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
-import { Order, SpeedItem, SpeedType } from '@/types';
+import { Order, ServiceItem, SpeedItem, SpeedType } from '@/types';
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -95,9 +95,98 @@ export function calculateBilledWeight(actualWeight: number): number {
 
 export const SPEED_FEES: Record<string, number> = {
   Normal: 0,
-  Express: 8000,
-  Kilat: 13000,
+  Express: 10000,
+  Kilat: 15000,
 };
+
+export const SPEED_SECONDARY_FEES: Record<string, number> = {
+  Normal: 0,
+  Express: 6000,
+  Kilat: 9000,
+};
+
+/**
+ * Normalizes a SpeedItem so legacy seeded fees (8000 / 13000) and missing feeSecondary
+ * are automatically upgraded to:
+ * - Express: Cuci Setrika = Rp 10.000/kg, Setrika & Cuci Lipat = Rp 6.000/kg
+ * - Kilat:   Cuci Setrika = Rp 15.000/kg, Setrika & Cuci Lipat = Rp 9.000/kg
+ */
+export function normalizeSpeedTariffs(sp: SpeedItem): SpeedItem {
+  const lower = String(sp.name || '').trim().toLowerCase();
+  const isNormal = lower === 'normal' || sp.id === 'SPD-01';
+  const isExpress = lower.includes('express') || sp.id === 'SPD-02';
+  const isKilat = lower.includes('kilat') || sp.id === 'SPD-03';
+
+  if (isNormal) {
+    return {
+      ...sp,
+      fee: 0,
+      feeSecondary: 0,
+    };
+  }
+
+  let fee = Number(sp.fee) || 0;
+  let feeSecondary = sp.feeSecondary !== undefined && sp.feeSecondary !== null ? Number(sp.feeSecondary) : undefined;
+
+  if (isExpress) {
+    if (fee <= 0 || fee === 8000) fee = 10000;
+    if (!feeSecondary || feeSecondary <= 0) feeSecondary = 6000;
+  } else if (isKilat) {
+    if (fee <= 0 || fee === 13000) fee = 15000;
+    if (!feeSecondary || feeSecondary <= 0) feeSecondary = 9000;
+  } else if (fee > 0 && (feeSecondary === undefined || feeSecondary <= 0)) {
+    feeSecondary = fee;
+  }
+
+  return {
+    ...sp,
+    fee,
+    feeSecondary: feeSecondary ?? 0,
+  };
+}
+
+/**
+ * Mengecek apakah layanan kiloan adalah kategori "Setrika" (saja) atau "Cuci Lipat"
+ * (bukan "Cuci Setrika").
+ */
+export function isSetrikaOrCuciLipatService(serviceName?: string): boolean {
+  const lower = String(serviceName || '').trim().toLowerCase();
+  if (!lower) return false;
+  const isCuciSetrika = lower.includes('cuci') && lower.includes('setrika');
+  if (isCuciSetrika) return false;
+  return lower.includes('setrika') || lower.includes('lipat');
+}
+
+/**
+ * Menghitung harga per kg layanan kiloan berdasarkan layanan & kecepatan yang dipilih:
+ * - Normal: mengikuti harga layanan kiloan (misal Cuci Setrika Rp 6.000/7.000, Setrika Rp 5.000, Cuci Lipat Rp 5.000)
+ * - Express:
+ *   - Cuci Setrika: Rp 10.000/kg
+ *   - Setrika & Cuci Lipat: Rp 6.000/kg
+ * - Kilat:
+ *   - Cuci Setrika: Rp 15.000/kg
+ *   - Setrika & Cuci Lipat: Rp 9.000/kg
+ */
+export function getKiloanPricePerKg(
+  service: Pick<ServiceItem, 'name' | 'price'> | null | undefined,
+  speed: SpeedItem | null | undefined
+): number {
+  if (!service) return 0;
+  if (!speed) return service.price;
+
+  const normSpd = normalizeSpeedTariffs(speed);
+  const lowerSpd = normSpd.name.trim().toLowerCase();
+
+  if (lowerSpd === 'normal' || (normSpd.fee <= 0 && (!normSpd.feeSecondary || normSpd.feeSecondary <= 0))) {
+    return service.price;
+  }
+
+  if (isSetrikaOrCuciLipatService(service.name)) {
+    return normSpd.feeSecondary && normSpd.feeSecondary > 0 ? normSpd.feeSecondary : normSpd.fee;
+  }
+
+  return normSpd.fee > 0 ? normSpd.fee : service.price;
+}
 
 /**
  * Resolves the SpeedItem related to an Order (via foreign key speedId or matching speed name).
@@ -109,18 +198,20 @@ export function resolveOrderSpeed(
   if (order.speedId) {
     const byId = speeds.find((s) => s.id === order.speedId);
     if (byId) {
+      const norm = normalizeSpeedTariffs(byId);
       return {
-        ...byId,
-        fee: byId.fee > 0 ? byId.fee : (order.speedFee || 0),
+        ...norm,
+        fee: norm.fee > 0 ? norm.fee : (order.speedFee || 0),
       };
     }
   }
   const orderSpeedName = String(order.speed || 'Normal').trim().toLowerCase();
   const byName = speeds.find((s) => s.name.trim().toLowerCase() === orderSpeedName);
   if (byName) {
+    const norm = normalizeSpeedTariffs(byName);
     return {
-      ...byName,
-      fee: byName.fee > 0 ? byName.fee : (order.speedFee || 0),
+      ...norm,
+      fee: norm.fee > 0 ? norm.fee : (order.speedFee || 0),
     };
   }
   const fallbackDuration =
@@ -128,13 +219,14 @@ export function resolveOrderSpeed(
     (orderSpeedName === 'kilat' ? '8 Jam' : orderSpeedName === 'express' ? '1 Hari' : '2 Hari');
   const fallbackHours =
     orderSpeedName === 'kilat' ? 8 : orderSpeedName === 'express' ? 24 : 48;
-  return {
+  return normalizeSpeedTariffs({
     id: order.speedId || 'SPD-01',
     name: order.speed || 'Normal',
     durationLabel: fallbackDuration,
     durationHours: fallbackHours,
     fee: order.speedFee && order.speedFee > 0 ? order.speedFee : (SPEED_FEES[order.speed] || 0),
-  };
+    feeSecondary: SPEED_SECONDARY_FEES[order.speed] || 0,
+  });
 }
 
 export function calculateProfitMargin(price: number, hpp: number): number {

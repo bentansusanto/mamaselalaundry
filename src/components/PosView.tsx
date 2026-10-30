@@ -3,7 +3,14 @@
 import React, { useState, useEffect } from 'react';
 import { Customer, Order, OrderItemDetail, PaymentMethod, PaymentStatus, ServiceItem, SpeedItem, UserAccount } from '@/types';
 import { INITIAL_SPEEDS } from '@/lib/initialData';
-import { calculateBilledWeight, formatRupiah, formatWeight, roundPaymentTotal } from '@/lib/utils';
+import {
+  calculateBilledWeight,
+  formatRupiah,
+  formatWeight,
+  getKiloanPricePerKg,
+  normalizeSpeedTariffs,
+  roundPaymentTotal,
+} from '@/lib/utils';
 import { getAllOrders } from '@/lib/db';
 import { User, Scale, Zap, CreditCard, Plus, Minus, Search, Check, AlertCircle, Sparkles, Banknote, QrCode, Flame, Clock } from 'lucide-react';
 
@@ -93,7 +100,7 @@ export const PosView: React.FC<PosViewProps> = ({
   };
 
   // Speed (Related to Tabel Kecepatan / speeds)
-  const speedList = speeds && speeds.length > 0 ? speeds : INITIAL_SPEEDS;
+  const speedList = (speeds && speeds.length > 0 ? speeds : INITIAL_SPEEDS).map(normalizeSpeedTariffs);
   const [selectedSpeedId, setSelectedSpeedId] = useState<string>(speedList[0]?.id || 'SPD-01');
 
   useEffect(() => {
@@ -112,12 +119,11 @@ export const PosView: React.FC<PosViewProps> = ({
   const [notes, setNotes] = useState('');
 
   // Calculations
-  // Jika kecepatan memiliki tarif > 0 (misal Express / Kilat), maka tarif per kg menggunakan tarif kecepatan tersebut (Tarif Kecepatan x Berat).
-  // Jika kecepatan Normal (fee === 0), maka menggunakan tarif layanan kiloan yang dipilih.
+  // - Normal: mengikuti harga layanan kiloan yang dipilih
+  // - Express: Cuci Setrika = Rp 10.000/kg, Setrika & Cuci Lipat = Rp 6.000/kg
+  // - Kilat: Cuci Setrika = Rp 15.000/kg, Setrika & Cuci Lipat = Rp 9.000/kg
   const billedWeight = actualWeight > 0 ? calculateBilledWeight(actualWeight) : 0;
-  const baseKiloanPricePerKg = selectedKiloan ? selectedKiloan.price : 0;
-  const hasSpeedRateOverride = Boolean(selectedSpeedObj && selectedSpeedObj.fee > 0);
-  const kiloanPricePerKg = hasSpeedRateOverride ? selectedSpeedObj.fee : baseKiloanPricePerKg;
+  const kiloanPricePerKg = getKiloanPricePerKg(selectedKiloan, selectedSpeedObj);
   const mainServiceTotal = billedWeight * kiloanPricePerKg;
 
   const satuanItems: OrderItemDetail[] = Object.entries(satuanQuantities)
@@ -449,6 +455,7 @@ export const PosView: React.FC<PosViewProps> = ({
             <div className="grid grid-cols-3 gap-2">
               {kiloanServices.map((srv) => {
                 const isSelected = actualWeight > 0 && selectedKiloan?.id === srv.id;
+                const activeRate = getKiloanPricePerKg(srv, selectedSpeedObj);
                 return (
                   <button
                     key={srv.id}
@@ -465,7 +472,7 @@ export const PosView: React.FC<PosViewProps> = ({
                       {srv.variant ? ` (${srv.variant})` : ''}
                     </span>
                     <span className="text-[10px] text-blue-600 font-semibold mt-1">
-                      {formatRupiah(srv.price)}/kg
+                      {formatRupiah(activeRate)}/kg
                     </span>
                   </button>
                 );
@@ -655,9 +662,10 @@ export const PosView: React.FC<PosViewProps> = ({
                     <span className={`text-xs font-bold ${titleColor}`}>{spd.name}</span>
                     <span className="text-[10px] text-slate-500 mt-0.5">{spd.durationLabel}</span>
                     <span className={`text-[11px] font-semibold mt-1 ${feeColor}`}>
-                      {spd.fee > 0
-                        ? `${formatRupiah(spd.fee)}/kg`
-                        : `${formatRupiah(baseKiloanPricePerKg)}/kg`}
+                      {formatRupiah(
+                        getKiloanPricePerKg(selectedKiloan || kiloanServices[0], spd)
+                      )}
+                      /kg
                     </span>
                   </button>
                 );

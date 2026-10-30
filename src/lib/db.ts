@@ -1,6 +1,7 @@
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
 import { Customer, Order, ServiceItem, SpeedItem, UserAccount, SheetsConfig, SyncQueueItem } from '@/types';
 import { INITIAL_CUSTOMERS, INITIAL_ORDERS, INITIAL_SERVICES, INITIAL_SPEEDS, INITIAL_USERS } from './initialData';
+import { normalizeSpeedTariffs } from './utils';
 
 interface LaundryDB extends DBSchema {
   orders: {
@@ -238,19 +239,21 @@ export async function initDatabaseDefaults() {
   // Initialize / restore Speeds table (Tabel Kecepatan) and link existing Orders
   const currentSpeeds = await db.getAll('speeds');
   const deletedSpeedIds: string[] = (await db.get('settings', 'deleted_speed_ids')) || [];
-  const isSpeedsSeededV1 = await db.get('settings', 'speeds_seeded_v1');
-  if (!isSpeedsSeededV1 || currentSpeeds.length === 0) {
+  const isSpeedsSeededV2 = await db.get('settings', 'speeds_seeded_v2');
+  if (!isSpeedsSeededV2 || currentSpeeds.length === 0) {
     const txSpd = db.transaction('speeds', 'readwrite');
     for (const spd of INITIAL_SPEEDS) {
       if (!deletedSpeedIds.includes(spd.id)) {
         const existingSpd = await txSpd.store.get(spd.id);
         if (!existingSpd) {
           await txSpd.store.put(spd);
+        } else {
+          await txSpd.store.put(normalizeSpeedTariffs(existingSpd));
         }
       }
     }
     await txSpd.done;
-    await db.put('settings', true, 'speeds_seeded_v1');
+    await db.put('settings', true, 'speeds_seeded_v2');
   }
 
   // Backfill speedId relation on existing orders so all orders link to speeds table
@@ -442,13 +445,16 @@ export async function getAllSpeeds(): Promise<SpeedItem[]> {
   if (!db) return INITIAL_SPEEDS;
   const list = await db.getAll('speeds');
   if (list.length === 0) return INITIAL_SPEEDS;
-  return list.sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true }));
+  return list
+    .map(normalizeSpeedTariffs)
+    .sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true }));
 }
 
 export async function saveSpeed(speed: SpeedItem, skipQueue = false): Promise<void> {
   const db = await getDB();
   if (!db) return;
-  await db.put('speeds', speed);
+  const normalized = normalizeSpeedTariffs(speed);
+  await db.put('speeds', normalized);
   const deletedIds: string[] = (await db.get('settings', 'deleted_speed_ids')) || [];
   if (deletedIds.includes(speed.id)) {
     await db.put(

@@ -1,6 +1,7 @@
 import { createClient } from '@/utils/supabase/client';
 import { Customer, Order, OrderItemDetail, ServiceItem, SpeedItem, VariantSize } from '@/types';
 import { INITIAL_SERVICES, INITIAL_SPEEDS } from './initialData';
+import { normalizeSpeedTariffs } from './utils';
 import {
   saveCustomer,
   deleteCustomer,
@@ -67,7 +68,13 @@ function normalizeRemoteService(s: any): ServiceItem {
 function normalizeRemoteSpeed(sp: any): SpeedItem {
   // Supports rows from public.speeds table OR fallback rows stored in public.services with category='Kecepatan'
   const isFromServicesFallback = sp.category === 'Kecepatan';
-  return {
+  const rawSecondary = isFromServicesFallback
+    ? sp.profit_margin_percent && Number(sp.profit_margin_percent) > 100
+      ? Number(sp.profit_margin_percent)
+      : undefined
+    : sp.fee_secondary ?? sp.feeSecondary;
+
+  return normalizeSpeedTariffs({
     id: sp.id,
     name: String(sp.name || 'Normal').trim(),
     durationLabel: String(
@@ -77,7 +84,8 @@ function normalizeRemoteSpeed(sp: any): SpeedItem {
       isFromServicesFallback ? sp.hpp || 48 : sp.duration_hours ?? sp.durationHours ?? 48
     ),
     fee: Number(isFromServicesFallback ? sp.price ?? 0 : sp.fee ?? 0),
-  };
+    feeSecondary: rawSecondary !== undefined && rawSecondary !== null ? Number(rawSecondary) : undefined,
+  });
 }
 
 /**
@@ -176,17 +184,17 @@ export async function pullFromSupabase(): Promise<{
     }
     for (const locSpd of localSpeeds) {
       if (!pendingSpeedDeletes.has(locSpd.id)) {
-        mergedSpeedsMap.set(locSpd.id, locSpd);
+        mergedSpeedsMap.set(locSpd.id, normalizeSpeedTariffs(locSpd));
       }
     }
     const remoteSpeedIds = new Set<string>();
     for (const remSpd of remoteSpeedsRaw) {
       remoteSpeedIds.add(remSpd.id);
-      mergedSpeedsMap.set(remSpd.id, remSpd);
+      mergedSpeedsMap.set(remSpd.id, normalizeSpeedTariffs(remSpd));
     }
     pendingSpeedUpdates.forEach((sp, id) => {
       if (!pendingSpeedDeletes.has(id)) {
-        mergedSpeedsMap.set(id, sp);
+        mergedSpeedsMap.set(id, normalizeSpeedTariffs(sp));
       }
     });
 
@@ -195,7 +203,12 @@ export async function pullFromSupabase(): Promise<{
     );
 
     for (const sp of speeds) {
-      if (!remoteSpeedIds.has(sp.id)) {
+      const rawRem = rawSpeedSource.find((r: any) => r.id === sp.id);
+      const needsTariffUpgrade =
+        rawRem &&
+        (Number(rawRem.fee ?? rawRem.price ?? 0) !== sp.fee ||
+          (sp.feeSecondary && Number(rawRem.fee_secondary ?? rawRem.feeSecondary ?? 0) !== sp.feeSecondary));
+      if (!remoteSpeedIds.has(sp.id) || needsTariffUpgrade) {
         speedsToPushToSupabase.push(sp);
       }
     }
@@ -766,27 +779,39 @@ export async function deleteServiceFromSupabase(id: string): Promise<boolean> {
 export async function syncSpeedToSupabase(speed: SpeedItem): Promise<boolean> {
   if (typeof window !== 'undefined' && !navigator.onLine) return false;
   try {
+    const normalized = normalizeSpeedTariffs(speed);
     const { error } = await supabase.from('speeds').upsert({
-      id: speed.id,
-      name: speed.name,
-      duration_label: speed.durationLabel,
-      duration_hours: speed.durationHours,
-      fee: speed.fee,
+      id: normalized.id,
+      name: normalized.name,
+      duration_label: normalized.durationLabel,
+      duration_hours: normalized.durationHours,
+      fee: normalized.fee,
+      fee_secondary: normalized.feeSecondary ?? 0,
     });
     if (error) {
-      // Fallback: also persist in public.services with category='Kecepatan' if speeds table hasn't been created in Supabase yet
-      const fallbackRes = await supabase.from('services').upsert({
-        id: speed.id,
-        name: speed.name,
-        category: 'Kecepatan',
-        unit: speed.durationLabel,
-        price: speed.fee,
-        hpp: speed.durationHours,
-        profit_margin_percent: 100,
+      // Try public.speeds without fee_secondary column first
+      const retrySpeeds = await supabase.from('speeds').upsert({
+        id: normalized.id,
+        name: normalized.name,
+        duration_label: normalized.durationLabel,
+        duration_hours: normalized.durationHours,
+        fee: normalized.fee,
       });
-      if (fallbackRes.error) {
-        console.error('Supabase speed upsert error:', error);
-        return false;
+      if (retrySpeeds.error) {
+        // Fallback: also persist in public.services with category='Kecepatan' if speeds table hasn't been created in Supabase yet
+        const fallbackRes = await supabase.from('services').upsert({
+          id: normalized.id,
+          name: normalized.name,
+          category: 'Kecepatan',
+          unit: normalized.durationLabel,
+          price: normalized.fee,
+          hpp: normalized.durationHours,
+          profit_margin_percent: normalized.feeSecondary ?? 0,
+        });
+        if (fallbackRes.error) {
+          console.error('Supabase speed upsert error:', error);
+          return false;
+        }
       }
     }
     const queue = await getSyncQueue();

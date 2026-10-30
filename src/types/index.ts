@@ -28,7 +28,8 @@ export interface SpeedItem {
   name: string; // e.g. Normal, Express, Kilat
   durationLabel: string; // e.g. "2 Hari", "1 Hari", "8 Jam"
   durationHours: number; // e.g. 48, 24, 8 (dipakai untuk kalkulasi estimasi selesai)
-  fee: number; // Biaya tambahan (Rp), misal: 0, 8000, 13000
+  fee: number; // Tarif per kg untuk Cuci Setrika (Rp), misal: Normal 0, Express 10000, Kilat 15000
+  feeSecondary?: number; // Tarif per kg untuk Setrika & Cuci Lipat (Rp), misal: Normal 0, Express 6000, Kilat 9000
 }
 
 export interface OrderItemDetail {

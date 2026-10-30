@@ -31,9 +31,13 @@ create table if not exists public.speeds (
   name text not null,
   duration_label text default '2 Hari',
   duration_hours numeric default 48,
-  fee numeric default 0,
+  fee numeric default 0, -- Tarif per kg untuk Cuci Setrika
+  fee_secondary numeric default 0, -- Tarif per kg untuk Setrika & Cuci Lipat
   created_at timestamptz default now()
 );
+
+alter table public.speeds
+  add column if not exists fee_secondary numeric default 0;
 
 -- 3. Tabel Pesanan (Orders) - Berelasi dengan Tabel Kecepatan (speeds)
 create table if not exists public.orders (
@@ -85,12 +89,14 @@ alter publication supabase_realtime add table public.speeds;
 alter publication supabase_realtime add table public.orders;
 
 -- 6.5. Isi Data Awal Kecepatan (Speeds) & Hubungkan Relasi ke Orders
-insert into public.speeds (id, name, duration_label, duration_hours, fee)
+insert into public.speeds (id, name, duration_label, duration_hours, fee, fee_secondary)
 values
-  ('SPD-01', 'Normal', '2 Hari', 48, 0),
-  ('SPD-02', 'Express', '1 Hari', 24, 8000),
-  ('SPD-03', 'Kilat', '8 Jam', 8, 13000)
-on conflict (id) do nothing;
+  ('SPD-01', 'Normal', '2 Hari', 48, 0, 0),
+  ('SPD-02', 'Express', '1 Hari', 24, 10000, 6000),
+  ('SPD-03', 'Kilat', '8 Jam', 8, 15000, 9000)
+on conflict (id) do update
+  set fee = excluded.fee,
+      fee_secondary = excluded.fee_secondary;
 
 update public.orders o
 set speed_id = s.id

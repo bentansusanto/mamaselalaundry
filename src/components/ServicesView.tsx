@@ -3,7 +3,12 @@
 import React, { useState } from 'react';
 import { Order, ServiceCategory, ServiceItem, SpeedItem, UnitType, VariantSize } from '@/types';
 import { INITIAL_SPEEDS } from '@/lib/initialData';
-import { calculateProfitMargin, formatRupiah } from '@/lib/utils';
+import {
+  calculateProfitMargin,
+  formatRupiah,
+  getKiloanPricePerKg,
+  normalizeSpeedTariffs,
+} from '@/lib/utils';
 import {
   Sparkles,
   Plus,
@@ -48,7 +53,8 @@ export const ServicesView: React.FC<ServicesViewProps> = ({
   const [speedName, setSpeedName] = useState('');
   const [speedDurationLabel, setSpeedDurationLabel] = useState('1 Hari');
   const [speedDurationHours, setSpeedDurationHours] = useState<number>(24);
-  const [speedFee, setSpeedFee] = useState<number>(8000);
+  const [speedFee, setSpeedFee] = useState<number>(10000);
+  const [speedFeeSecondary, setSpeedFeeSecondary] = useState<number>(6000);
 
   // Service Form states
   const [name, setName] = useState('');
@@ -63,7 +69,7 @@ export const ServicesView: React.FC<ServicesViewProps> = ({
 
   const q = searchQuery.trim().toLowerCase();
 
-  const speedList = speeds && speeds.length > 0 ? speeds : INITIAL_SPEEDS;
+  const speedList = (speeds && speeds.length > 0 ? speeds : INITIAL_SPEEDS).map(normalizeSpeedTariffs);
   const filteredSpeeds = speedList.filter(
     (sp) =>
       !q ||
@@ -123,16 +129,19 @@ export const ServicesView: React.FC<ServicesViewProps> = ({
     setSpeedName('');
     setSpeedDurationLabel('1 Hari');
     setSpeedDurationHours(24);
-    setSpeedFee(8000);
+    setSpeedFee(10000);
+    setSpeedFeeSecondary(6000);
     setIsSpeedModalOpen(true);
   };
 
   const handleOpenEditSpeed = (sp: SpeedItem) => {
-    setEditingSpeed(sp);
-    setSpeedName(sp.name);
-    setSpeedDurationLabel(sp.durationLabel);
-    setSpeedDurationHours(sp.durationHours);
-    setSpeedFee(sp.fee);
+    const norm = normalizeSpeedTariffs(sp);
+    setEditingSpeed(norm);
+    setSpeedName(norm.name);
+    setSpeedDurationLabel(norm.durationLabel);
+    setSpeedDurationHours(norm.durationHours);
+    setSpeedFee(norm.fee);
+    setSpeedFeeSecondary(norm.feeSecondary ?? norm.fee);
     setIsSpeedModalOpen(true);
   };
 
@@ -161,12 +170,17 @@ export const ServicesView: React.FC<ServicesViewProps> = ({
       }
     }
 
+    const primaryFee = Math.max(0, Number(speedFee) || 0);
+    const secondaryFee =
+      primaryFee === 0 ? 0 : Math.max(0, Number(speedFeeSecondary) || primaryFee);
+
     const newSpeed: SpeedItem = {
       id: nextSpeedId,
       name: speedName.trim(),
       durationLabel: speedDurationLabel.trim(),
       durationHours: Math.max(1, Number(speedDurationHours) || 24),
-      fee: Math.max(0, Number(speedFee) || 0),
+      fee: primaryFee,
+      feeSecondary: secondaryFee,
     };
 
     if (onSaveSpeed) {
@@ -404,13 +418,20 @@ export const ServicesView: React.FC<ServicesViewProps> = ({
                       {/* Column 2: Per-Kg Rate & Linked Orders Count */}
                       <td className="py-3 px-2 text-right align-middle">
                         <div className="space-y-1">
-                          <div
-                            className={`text-xs font-extrabold ${
-                              spd.fee > 0 ? 'text-amber-700' : 'text-slate-600'
-                            }`}
-                          >
-                            {spd.fee > 0 ? `${formatRupiah(spd.fee)}/kg` : 'Harga Normal'}
-                          </div>
+                          {spd.fee > 0 ? (
+                            <div className="space-y-0.5 leading-tight">
+                              <div className="text-[11px] font-extrabold text-amber-700">
+                                CS: {formatRupiah(spd.fee)}/kg
+                              </div>
+                              <div className="text-[10px] font-bold text-slate-600">
+                                Setrika/Lipat: {formatRupiah(spd.feeSecondary || spd.fee)}/kg
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="text-xs font-extrabold text-slate-600">
+                              Harga Normal
+                            </div>
+                          )}
                           <div>
                             <span
                               className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
@@ -579,6 +600,33 @@ export const ServicesView: React.FC<ServicesViewProps> = ({
                       </span>
                     </div>
                   </div>
+
+                  {/* Speed Rates Breakdown for Kiloan Services */}
+                  {isKiloan && (
+                    <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                      {speedList.map((spd) => {
+                        const rate = getKiloanPricePerKg(item, spd);
+                        const lowerSpd = spd.name.toLowerCase();
+                        const isKilat = lowerSpd.includes('kilat');
+                        const isExpress = lowerSpd.includes('express');
+                        return (
+                          <span
+                            key={spd.id}
+                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-bold border ${
+                              isKilat
+                                ? 'bg-rose-50 text-rose-800 border-rose-200/80'
+                                : isExpress
+                                ? 'bg-amber-50 text-amber-800 border-amber-200/80'
+                                : 'bg-slate-100 text-slate-700 border-slate-200'
+                            }`}
+                          >
+                            <span>{spd.name}:</span>
+                            <strong className="font-extrabold">{formatRupiah(rate)}/kg</strong>
+                          </span>
+                        );
+                      })}
+                    </div>
+                  )}
 
                   {/* Bottom Action Buttons: Large Touch Targets & Safe Spacing */}
                   <div className="pt-0.5 flex items-center justify-end gap-2">
@@ -812,18 +860,34 @@ export const ServicesView: React.FC<ServicesViewProps> = ({
                 ))}
               </div>
 
-              <div>
-                <label className="font-bold text-slate-700 block mb-1">
-                  Tarif Kecepatan per Kg (Rp/kg)
-                </label>
-                <input
-                  type="number"
-                  min={0}
-                  value={speedFee}
-                  onChange={(e) => setSpeedFee(Math.max(0, Number(e.target.value) || 0))}
-                  placeholder="Contoh: 10000 (isi 0 untuk harga Normal)"
-                  className="w-full px-3 py-2 bg-slate-50 border rounded-xl font-bold text-amber-700"
-                />
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">
+                    Tarif Cuci Setrika / Kg (Rp)
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={speedFee}
+                    onChange={(e) => setSpeedFee(Math.max(0, Number(e.target.value) || 0))}
+                    placeholder="Contoh: 10000 / 15000"
+                    className="w-full px-3 py-2 bg-slate-50 border rounded-xl font-bold text-amber-700"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">
+                    Tarif Setrika &amp; Lipat / Kg (Rp)
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={speedFeeSecondary}
+                    onChange={(e) => setSpeedFeeSecondary(Math.max(0, Number(e.target.value) || 0))}
+                    placeholder="Contoh: 6000 / 9000"
+                    className="w-full px-3 py-2 bg-slate-50 border rounded-xl font-bold text-blue-700"
+                  />
+                </div>
               </div>
 
               <div className="p-3 bg-amber-50/70 border border-amber-200 rounded-xl space-y-1 text-[11px] text-amber-900">
@@ -831,8 +895,9 @@ export const ServicesView: React.FC<ServicesViewProps> = ({
                 <p className="text-amber-800">
                   {speedFee > 0 ? (
                     <>
-                      Saat dipilih di Kasir POS, total harga kiloan dihitung menggunakan rumus:{' '}
-                      <strong>{formatRupiah(speedFee)} × Berat Pakaian (Kg)</strong> (menggantikan tarif normal per kg) dengan estimasi selesai +{speedDurationHours || 0} jam.
+                      • <strong>Cuci Setrika</strong>: {formatRupiah(speedFee)} × Berat Pakaian (Kg)
+                      <br />• <strong>Setrika &amp; Cuci Lipat</strong>:{' '}
+                      {formatRupiah(speedFeeSecondary || speedFee)} × Berat Pakaian (Kg)
                     </>
                   ) : (
                     <>
