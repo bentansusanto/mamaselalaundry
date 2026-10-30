@@ -112,8 +112,12 @@ export const PosView: React.FC<PosViewProps> = ({
   const [notes, setNotes] = useState('');
 
   // Calculations
+  // Jika kecepatan memiliki tarif > 0 (misal Express / Kilat), maka tarif per kg menggunakan tarif kecepatan tersebut (Tarif Kecepatan x Berat).
+  // Jika kecepatan Normal (fee === 0), maka menggunakan tarif layanan kiloan yang dipilih.
   const billedWeight = actualWeight > 0 ? calculateBilledWeight(actualWeight) : 0;
-  const kiloanPricePerKg = selectedKiloan ? selectedKiloan.price : 0;
+  const baseKiloanPricePerKg = selectedKiloan ? selectedKiloan.price : 0;
+  const hasSpeedRateOverride = Boolean(selectedSpeedObj && selectedSpeedObj.fee > 0);
+  const kiloanPricePerKg = hasSpeedRateOverride ? selectedSpeedObj.fee : baseKiloanPricePerKg;
   const mainServiceTotal = billedWeight * kiloanPricePerKg;
 
   const satuanItems: OrderItemDetail[] = Object.entries(satuanQuantities)
@@ -135,7 +139,8 @@ export const PosView: React.FC<PosViewProps> = ({
     });
 
   const itemsTotal = satuanItems.reduce((acc, curr) => acc + curr.total, 0);
-  const speedFee = selectedSpeedObj ? selectedSpeedObj.fee : 0;
+  // Biaya kecepatan tidak ditambahkan lagi jika sudah dikalikan dengan berat kiloan (billedWeight > 0)
+  const speedFee = billedWeight > 0 ? 0 : selectedSpeedObj ? selectedSpeedObj.fee : 0;
   const rawGrandTotal = mainServiceTotal + itemsTotal + speedFee;
   const grandTotal = roundPaymentTotal(rawGrandTotal);
   const roundingAdjustment = grandTotal - rawGrandTotal;
@@ -218,7 +223,7 @@ export const PosView: React.FC<PosViewProps> = ({
       mainService: actualWeight > 0 && selectedKiloan ? selectedKiloan.name : 'Satuan Saja',
       speedId: selectedSpeedObj.id,
       speed: selectedSpeedObj.name,
-      speedFee: selectedSpeedObj.fee,
+      speedFee,
       speedDuration: selectedSpeedObj.durationLabel,
       actualWeight,
       billedWeight,
@@ -650,7 +655,9 @@ export const PosView: React.FC<PosViewProps> = ({
                     <span className={`text-xs font-bold ${titleColor}`}>{spd.name}</span>
                     <span className="text-[10px] text-slate-500 mt-0.5">{spd.durationLabel}</span>
                     <span className={`text-[11px] font-semibold mt-1 ${feeColor}`}>
-                      +{formatRupiah(spd.fee)}
+                      {spd.fee > 0
+                        ? `${formatRupiah(spd.fee)}/kg`
+                        : `${formatRupiah(baseKiloanPricePerKg)}/kg`}
                     </span>
                   </button>
                 );
@@ -667,8 +674,10 @@ export const PosView: React.FC<PosViewProps> = ({
               {actualWeight > 0 && selectedKiloan && (
                 <div className="flex justify-between text-slate-700 font-medium">
                   <span>
-                    • Kiloan: <strong className="text-slate-900">{selectedKiloan.name}</strong> ({formatWeight(actualWeight)} kg
-                    {billedWeight !== actualWeight ? ` → min ${formatWeight(billedWeight)} kg` : ''})
+                    • Kiloan: <strong className="text-slate-900">{selectedKiloan.name}</strong> (
+                    {formatWeight(actualWeight)} kg
+                    {billedWeight !== actualWeight ? ` → min ${formatWeight(billedWeight)} kg` : ''} ×{' '}
+                    {formatRupiah(kiloanPricePerKg)}/kg)
                   </span>
                   <span className="font-bold text-slate-900">{formatRupiah(mainServiceTotal)}</span>
                 </div>
@@ -683,9 +692,16 @@ export const PosView: React.FC<PosViewProps> = ({
               ))}
               <div className="flex justify-between text-slate-700 font-medium pt-0.5 border-t border-blue-200/60">
                 <span>
-                  • Kecepatan: <strong className="text-slate-900">{selectedSpeedObj.name}</strong> ({selectedSpeedObj.durationLabel})
+                  • Kecepatan: <strong className="text-slate-900">{selectedSpeedObj.name}</strong> (
+                  {selectedSpeedObj.durationLabel})
                 </span>
-                <span className="font-bold text-slate-900">+{formatRupiah(speedFee)}</span>
+                <span className="font-bold text-slate-900">
+                  {actualWeight > 0
+                    ? `${formatRupiah(kiloanPricePerKg)}/kg`
+                    : speedFee > 0
+                    ? `+${formatRupiah(speedFee)}`
+                    : 'Tarif Normal'}
+                </span>
               </div>
             </div>
           )}
@@ -722,10 +738,11 @@ export const PosView: React.FC<PosViewProps> = ({
             {actualWeight > 0 && selectedKiloan && (
               <div className="flex justify-between text-slate-600">
                 <span>
-                  {selectedKiloan.name} ({formatWeight(actualWeight)} kg
-                  {billedWeight !== actualWeight ? ` / min ${formatWeight(billedWeight)} kg` : ''}):
+                  {selectedKiloan.name} — {selectedSpeedObj.name} ({formatWeight(actualWeight)} kg
+                  {billedWeight !== actualWeight ? ` / min ${formatWeight(billedWeight)} kg` : ''} ×{' '}
+                  {formatRupiah(kiloanPricePerKg)}/kg):
                 </span>
-                <span>{formatRupiah(mainServiceTotal)}</span>
+                <span className="font-bold text-slate-900">{formatRupiah(mainServiceTotal)}</span>
               </div>
             )}
             {satuanItems.map((item, idx) => (
@@ -740,7 +757,13 @@ export const PosView: React.FC<PosViewProps> = ({
               <span>
                 Kecepatan ({selectedSpeedObj.name} • {selectedSpeedObj.durationLabel}):
               </span>
-              <span>{speedFee > 0 ? `+${formatRupiah(speedFee)}` : 'Standar (+Rp 0)'}</span>
+              <span>
+                {actualWeight > 0
+                  ? `Tarif ${formatRupiah(kiloanPricePerKg)}/kg`
+                  : speedFee > 0
+                  ? `+${formatRupiah(speedFee)}`
+                  : 'Standar (Rp 0)'}
+              </span>
             </div>
             {roundingAdjustment !== 0 && (
               <div className="flex justify-between text-slate-500 text-[11px]">

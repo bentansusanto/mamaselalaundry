@@ -249,12 +249,17 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
                       <span className="font-bold text-slate-800">
                         {relatedSpeed.name} ({relatedSpeed.durationLabel})
                       </span>
-                      {relatedSpeed.fee > 0 && (
+                      {order.actualWeight > 0 && order.billedWeight > 0 ? (
                         <span className="text-amber-700 font-bold">
                           {' '}
-                          • +{formatRupiah(relatedSpeed.fee)}
+                          • {formatRupiah(order.mainServiceTotal / order.billedWeight)}/kg
                         </span>
-                      )}
+                      ) : order.speedFee > 0 ? (
+                        <span className="text-amber-700 font-bold">
+                          {' '}
+                          • +{formatRupiah(order.speedFee)}
+                        </span>
+                      ) : null}
                     </p>
                     {(order.items || []).length > 0 && (
                       <div className="flex flex-wrap gap-1 pt-0.5">
@@ -429,12 +434,20 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
                 )}
                 {(() => {
                   const modalSpd = resolveOrderSpeed(paymentModalOrder, speedList);
+                  const ratePerKg =
+                    paymentModalOrder.actualWeight > 0 && paymentModalOrder.billedWeight > 0
+                      ? paymentModalOrder.mainServiceTotal / paymentModalOrder.billedWeight
+                      : 0;
                   return (
                     <div className="flex justify-between text-[11px] gap-2">
                       <span className="text-slate-500 shrink-0">Kecepatan:</span>
                       <span className="text-slate-700 text-right font-semibold">
                         {modalSpd.name} ({modalSpd.durationLabel})
-                        {modalSpd.fee > 0 ? ` • +${formatRupiah(modalSpd.fee)}` : ''}
+                        {ratePerKg > 0
+                          ? ` • ${formatRupiah(ratePerKg)}/kg`
+                          : paymentModalOrder.speedFee > 0
+                          ? ` • +${formatRupiah(paymentModalOrder.speedFee)}`
+                          : ''}
                       </span>
                     </div>
                   );

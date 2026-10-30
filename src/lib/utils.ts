@@ -111,7 +111,7 @@ export function resolveOrderSpeed(
     if (byId) {
       return {
         ...byId,
-        fee: order.speedFee !== undefined && order.speedFee !== null ? order.speedFee : byId.fee,
+        fee: byId.fee > 0 ? byId.fee : (order.speedFee || 0),
       };
     }
   }
@@ -120,7 +120,7 @@ export function resolveOrderSpeed(
   if (byName) {
     return {
       ...byName,
-      fee: order.speedFee !== undefined && order.speedFee !== null ? order.speedFee : byName.fee,
+      fee: byName.fee > 0 ? byName.fee : (order.speedFee || 0),
     };
   }
   const fallbackDuration =
@@ -133,7 +133,7 @@ export function resolveOrderSpeed(
     name: order.speed || 'Normal',
     durationLabel: fallbackDuration,
     durationHours: fallbackHours,
-    fee: order.speedFee !== undefined && order.speedFee !== null ? order.speedFee : (SPEED_FEES[order.speed] || 0),
+    fee: order.speedFee && order.speedFee > 0 ? order.speedFee : (SPEED_FEES[order.speed] || 0),
   };
 }
 

@@ -31,13 +31,18 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
       cleanPhone = '62' + cleanPhone.slice(1);
     }
 
+    const effectiveRatePerKg =
+      order.actualWeight > 0 && order.billedWeight > 0
+        ? order.mainServiceTotal / order.billedWeight
+        : 0;
+
     const kiloanLine =
       order.actualWeight > 0
         ? `- Layanan Kiloan: ${order.mainService} (${formatWeight(order.actualWeight)} kg${
             order.billedWeight !== order.actualWeight
               ? `, dihitung min 3kg: ${formatWeight(order.billedWeight)} kg`
               : ''
-          }): ${formatRupiah(order.mainServiceTotal)}\n`
+          } × ${formatRupiah(effectiveRatePerKg)}/kg): ${formatRupiah(order.mainServiceTotal)}\n`
         : '';
 
     const itemsSummary =
@@ -58,6 +63,13 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
           }\n`
         : '';
 
+    const speedNote =
+      order.actualWeight > 0
+        ? `(${formatRupiah(effectiveRatePerKg)}/kg)`
+        : order.speedFee > 0
+        ? `(+${formatRupiah(order.speedFee)})`
+        : '';
+
     const text = `*NOTA LAUNDRY - MAMA SELA*
 Bida Asri 1 blok D1 no 12, Batam Center
 No. Order: *#${order.id}*
@@ -66,9 +78,7 @@ Tanggal Masuk: ${formatDateTime(order.createdAt)}
 Estimasi Selesai: ${formatDateTime(order.estimatedCompletion)}
 
 *Rincian:*
-${kiloanLine}${itemsSummary}- Kecepatan: ${relatedSpeed.name} (${relatedSpeed.durationLabel}) ${
-      order.speedFee > 0 ? `(+${formatRupiah(order.speedFee)})` : ''
-    }
+${kiloanLine}${itemsSummary}- Kecepatan: ${relatedSpeed.name} (${relatedSpeed.durationLabel}) ${speedNote}
 ${roundingSummary}
 *Total Tagihan: ${formatRupiah(order.totalPrice)}*
 Status Pembayaran: *${order.paymentStatus}* (${order.paymentMethod})
@@ -160,12 +170,18 @@ _Terima kasih telah mempercayakan pakaian Anda kepada kami!_`;
               </div>
             ))}
 
-            {/* Speed Fee */}
+            {/* Speed Info */}
             <div className="flex justify-between text-[11px]">
               <span>
                 Kecepatan: {relatedSpeed.name} ({relatedSpeed.durationLabel})
               </span>
-              <span>{order.speedFee > 0 ? formatRupiah(order.speedFee) : 'Rp 0'}</span>
+              <span>
+                {order.actualWeight > 0 && order.billedWeight > 0
+                  ? `${formatRupiah(order.mainServiceTotal / order.billedWeight)}/kg`
+                  : order.speedFee > 0
+                  ? formatRupiah(order.speedFee)
+                  : 'Rp 0'}
+              </span>
             </div>
 
             {/* Pembulatan if any */}

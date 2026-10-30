@@ -356,7 +356,7 @@ export const ServicesView: React.FC<ServicesViewProps> = ({
                     Kecepatan &amp; Durasi
                   </th>
                   <th scope="col" className="w-[32%] py-2.5 px-2 font-bold text-right">
-                    Biaya &amp; Order
+                    Tarif / Kg &amp; Order
                   </th>
                   <th scope="col" className="w-[26%] py-2.5 pl-2 pr-4 font-bold text-right">
                     Aksi
@@ -401,15 +401,15 @@ export const ServicesView: React.FC<ServicesViewProps> = ({
                         </div>
                       </th>
 
-                      {/* Column 2: Extra Fee & Linked Orders Count */}
+                      {/* Column 2: Per-Kg Rate & Linked Orders Count */}
                       <td className="py-3 px-2 text-right align-middle">
                         <div className="space-y-1">
                           <div
                             className={`text-xs font-extrabold ${
-                              spd.fee > 0 ? 'text-amber-700' : 'text-slate-700'
+                              spd.fee > 0 ? 'text-amber-700' : 'text-slate-600'
                             }`}
                           >
-                            +{formatRupiah(spd.fee)}
+                            {spd.fee > 0 ? `${formatRupiah(spd.fee)}/kg` : 'Harga Normal'}
                           </div>
                           <div>
                             <span
@@ -813,22 +813,32 @@ export const ServicesView: React.FC<ServicesViewProps> = ({
               </div>
 
               <div>
-                <label className="font-bold text-slate-700 block mb-1">Biaya Tambahan (Rp)</label>
+                <label className="font-bold text-slate-700 block mb-1">
+                  Tarif Kecepatan per Kg (Rp/kg)
+                </label>
                 <input
                   type="number"
                   min={0}
                   value={speedFee}
                   onChange={(e) => setSpeedFee(Math.max(0, Number(e.target.value) || 0))}
-                  placeholder="Contoh: 8000 (isi 0 untuk Normal)"
+                  placeholder="Contoh: 10000 (isi 0 untuk harga Normal)"
                   className="w-full px-3 py-2 bg-slate-50 border rounded-xl font-bold text-amber-700"
                 />
               </div>
 
               <div className="p-3 bg-amber-50/70 border border-amber-200 rounded-xl space-y-1 text-[11px] text-amber-900">
-                <p className="font-bold">Info Relasi Order:</p>
+                <p className="font-bold">Rumus Perhitungan di Kasir POS &amp; Orders:</p>
                 <p className="text-amber-800">
-                  Kecepatan ini akan muncul otomatis di Kasir POS dan berelasi dengan tabel{' '}
-                  <strong>Orders</strong> (menghitung estimasi selesai +{speedDurationHours || 0} jam dan biaya +{formatRupiah(speedFee)}).
+                  {speedFee > 0 ? (
+                    <>
+                      Saat dipilih di Kasir POS, total harga kiloan dihitung menggunakan rumus:{' '}
+                      <strong>{formatRupiah(speedFee)} × Berat Pakaian (Kg)</strong> (menggantikan tarif normal per kg) dengan estimasi selesai +{speedDurationHours || 0} jam.
+                    </>
+                  ) : (
+                    <>
+                      Tarif Rp 0 berarti mengikuti <strong>Harga Normal Layanan Kiloan × Berat Pakaian (Kg)</strong> dengan estimasi selesai +{speedDurationHours || 0} jam.
+                    </>
+                  )}
                 </p>
               </div>
             </div>
